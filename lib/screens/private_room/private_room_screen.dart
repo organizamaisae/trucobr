@@ -112,7 +112,7 @@ extension _PrivateRoomScreen on _AuroraAppState {
     refresh(() => busy = true);
     try {
       final room = join
-          ? await roomService.join(entered)
+          ? await roomService.join(entered, playerName: name)
           : await roomService.create(
               roomNameInput.text.trim(),
               capacity,

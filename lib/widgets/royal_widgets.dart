@@ -481,7 +481,7 @@ class Emblem extends StatelessWidget {
           stops: [0, .025, .955, 1],
         ).createShader(rect),
         child: Image.asset(
-                'assets/images/aurora-emblem-transparent.png',
+          'assets/images/aurora-emblem-transparent.png',
           fit: BoxFit.contain,
           semanticLabel: 'Aurora Cards — jogo de estratégia',
           errorBuilder: (_, error, stack) =>

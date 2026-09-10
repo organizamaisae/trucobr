@@ -27,7 +27,7 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(200, {})
 
     def do_GET(self):
-        if self.path == '/health':
+        if self.path in ('/', '/health'):
             self.reply(200, {'status': 'ok', 'mode': 'recreational-demo'})
         else:
             self.reply(404, {'error': 'Rota não encontrada'})

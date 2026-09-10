@@ -26,9 +26,7 @@ extension _LobbyScreen on _AuroraAppState {
                               Avatar(size: 130, icon: Icons.person, variant: i),
                               const SizedBox(height: 10),
                               Text(
-                                i == 0
-                                    ? name
-                                    : ['Rafael', 'Lívia', 'Lucas'][i - 1],
+                                i == 0 ? name : 'Aguardando jogador',
                                 style: royalText(31),
                               ),
                               Text(

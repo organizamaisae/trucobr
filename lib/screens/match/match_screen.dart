@@ -255,7 +255,7 @@ extension _MatchScreen on _AuroraAppState {
           padding: const EdgeInsets.all(8),
           child: Column(
             children: [
-              Text(['Rafael', 'Lívia', 'Lucas'][i - 1], style: royalText(26)),
+              Text('Jogador $i', style: royalText(26)),
               Text('${g.chips[i]} fichas', style: royalText(22, color: cream)),
               if (g.current == i)
                 Text('JOGANDO…', style: royalText(17, color: green)),

@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class RoomService {
-  static const serverUrl = String.fromEnvironment('SERVER_URL');
+  static const serverUrl = String.fromEnvironment(
+    'https://aurora-z5xt.onrender.com',
+  );
   static final Map<String, Map<String, dynamic>> _localRooms = {};
   Future<Map<String, dynamic>> create(
     String name,
@@ -30,7 +32,10 @@ class RoomService {
     });
   }
 
-  Future<Map<String, dynamic>> join(String code) async {
+  Future<Map<String, dynamic>> join(
+    String code, {
+    String playerName = 'Jogador',
+  }) async {
     if (serverUrl.isEmpty) {
       final room = _localRooms[code];
       if (room == null) {
@@ -40,7 +45,7 @@ class RoomService {
       }
       return room;
     }
-    return _request('/rooms/$code/join', {});
+    return _request('/rooms/$code/join', {'name': playerName});
   }
 
   Future<Map<String, dynamic>> _request(

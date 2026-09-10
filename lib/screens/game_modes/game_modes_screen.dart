@@ -32,12 +32,7 @@ extension _ModesScreen on _AuroraAppState {
                         icon: Icons.play_arrow,
                         greenButton: true,
                         fontSize: 34,
-                        onPressed: () {
-                          roomName = 'Mesa de poker';
-                          code = 'DEMO01';
-                          ready = true;
-                          go('lobby');
-                        },
+                        onPressed: () => go('private'),
                       ),
                     ),
                   ],

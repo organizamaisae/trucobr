@@ -34,7 +34,7 @@ Health Check Path: /health
 O plano gratuito pode dormir após inatividade. Quando o serviço ficar com status **Live**, copie a URL HTTPS, parecida com `https://aurora-cards-server.onrender.com`, e compile o aplicativo apontando para ela:
 
 ```powershell
-flutter build apk --release --dart-define=SERVER_URL=https://aurora-cards-server.onrender.com
+flutter build apk --release --dart-define=SERVER_URL=https://aurora-z5xt.onrender.com
 ```
 
 Não acrescente `/rooms` ao endereço. Teste a instalação com `https://sua-url.onrender.com/health`; a resposta esperada é JSON com `status: ok`. O banco de salas atual fica em memória e reiniciar o serviço apaga as salas. Para produção, adicione persistência e autenticação.
@@ -161,7 +161,7 @@ flutter doctor
 flutter build apk --debug
 
 # APK otimizado com servidor HTTPS:
-flutter build apk --release --dart-define=SERVER_URL=https://seu-servidor.exemplo.com
+flutter build apk --release --dart-define=SERVER_URL=https://aurora-z5xt.onrender.com
 ```
 
 Saídas: `build/app/outputs/flutter-apk/app-debug.apk` ou `app-release.apk`. O template de assinatura ainda usa a chave debug; configure seu keystore em `android/app/build.gradle.kts` antes de distribuir uma release assinada. Para instalar em aparelho autorizado via USB: `flutter install`.
