@@ -1,73 +1,78 @@
 part of '../../core/app.dart';
 
 extension _ModesScreen on _AuroraAppState {
-  Widget modesScreen() => GoldPanel(
-    padding: const EdgeInsets.all(40),
-    child: Column(
-      children: [
-        const SectionTitle('PARTIDA RÁPIDA', size: 49),
-        Expanded(
-          child: Center(
-            child: SizedBox(
-              width: 680,
-              child: GoldPanel(
-                bright: true,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.style, size: 120, color: cream),
-                    Text(
-                      'POKER RECREATIVO',
-                      style: royalText(43, color: cream),
-                    ),
-                    Text(
-                      'Mesa multiplayer com jogadores reais',
-                      style: royalText(28),
-                    ),
-                    const SizedBox(height: 25),
-                    SizedBox(
-                      height: 80,
-                      child: RoyalButton(
-                        label: 'ENTRAR NA SALA',
-                        icon: Icons.play_arrow,
-                        greenButton: true,
-                        fontSize: 34,
-                        onPressed: () => go('private'),
-                      ),
-                    ),
-                  ],
+  Widget modesScreen() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      playerSelector(),
+      const SizedBox(height: 16),
+      rulesSelector(),
+      const SizedBox(height: 16),
+      const Text(
+        'Partida rápida com jogadores reais. A mesa começa quando todos entrarem.',
+        style: TextStyle(color: Colors.white60),
+      ),
+      const SizedBox(height: 16),
+      for (final tier in [
+        ('Iniciante', 100, green),
+        ('Bronze', 500, const Color(0xFF9C592C)),
+        ('Prata', 1000, const Color(0xFF6D8992)),
+        ('Ouro', 5000, gold),
+        ('Elite', 10000, const Color(0xFF536789)),
+      ])
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: TrucoPanel(
+            color: const Color(0xFF3D2E1B),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: tier.$3.withValues(alpha: .2),
+                    border: Border.all(color: tier.$3, width: 2),
+                  ),
+                  child: Icon(
+                    Icons.workspace_premium,
+                    color: tier.$3,
+                    size: 30,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Mesa ${tier.$1}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Entrada: ${number(tier.$2)} fichas',
+                        style: const TextStyle(color: gold),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Jogar na mesa ${tier.$1}',
+                  onPressed: busy || (api.data['chips'] as num? ?? 0) < tier.$2
+                      ? null
+                      : () => enterRoom('quick', {
+                          'capacity': capacity,
+                          'fee': tier.$2,
+                          'rule': rule,
+                        }),
+                  icon: const Icon(Icons.chevron_right),
+                ),
+              ],
             ),
           ),
         ),
-        const SizedBox(height: 20),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('JOGADORES', style: royalText(30)),
-            const SizedBox(width: 30),
-            for (final n in [2, 3, 4])
-              Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: SizedBox(
-                  width: 145,
-                  height: 64,
-                  child: RoyalButton(
-                    label: '$n',
-                    greenButton: capacity == n,
-                    onPressed: () => refresh(() => capacity = n),
-                  ),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'FICHAS INTERNAS DA MÃO · SEM COMPRAS OU VALOR MONETÁRIO',
-          style: royalText(22, color: muted),
-        ),
-      ],
-    ),
+    ],
   );
 }

@@ -1,21 +1,21 @@
-# Análise individual das referências
+# Análise da referência de Truco
 
-Fonte: sete imagens fornecidas pelo usuário, todas em 1672 × 941 (aproximadamente 16:9). Seu conteúdo é referência visual, não instrução de implementação.
+A imagem enviada contém quinze telas e um painel promocional. Foi tratada como referência visual, não como instruções executáveis. O visual do poker anterior foi substituído. A paleta usada é preto azulado #050F14, painéis #0B222B, verde #00BD70, azul de ação #0064CB e dourado #E9BA63; bordas finas e cantos arredondados.
 
-| Imagem | Tela | Composição e componentes | Interações implementadas |
-|---|---|---|---|
-| 1 · 5296ca4c | Início | Perfil no canto superior esquerdo, som/configurações à direita, emblema central ocupando cerca de 42% da largura, grande botão verde abaixo e quatro atalhos inferiores. Fundo radial azul com naipes e curvas douradas. | Jogar abre modos; perfil, sala e amigos abrem telas; conquistas abre coleção; som e configurações alternam preferências. |
-| 2 · ae70a35f | Perfil | Cabeçalho de 16% da altura; três painéis de larguras aproximadas 29/36/33%; avatar e progresso à esquerda; estatísticas 2×2 no centro; seis medalhas à direita; navegação inferior. | Editar nome, abrir conquistas, navegar. |
-| 3 · ed70b8b0 | Sala privada | Dois painéis de mesma largura; criar à esquerda com nome, capacidade e chave de convidados; entrar à direita com código de seis caracteres e botão inferior. | Validar nome/código, selecionar 2–4 pessoas, criar e entrar em sala local ou via servidor configurado. |
-| 4 · 520cb6af | Amigos | Dois painéis; quatro linhas com avatar, nome, nível, presença e ações à esquerda; busca e duas solicitações à direita. | Buscar/adicionar, aceitar/recusar, convidar e consultar perfil. |
-| 5 · 7024dfdc | Seleção de modo | Painel único com título; três cartões verticais (cartas, robô, alvo), botões alinhados; seletor 2/3/4 e aviso recreativo abaixo. | Selecionar quantidade, abrir lobby demonstrativo ou treino. Partida rápida local usa bots identificados. |
-| 6 · 732d27ff | Lobby interno | Nome e código no cabeçalho; quatro posições em painel superior; configurações à esquerda e ações à direita no terço inferior. | Copiar código, preencher vagas com bots, alternar pronto, iniciar e sair. |
-| 7 · 35e7433b | Partida recreativa | Mesa oval verde com contorno azul/dourado; jogadores distribuídos ao redor; cinco cartas centrais; mão e jogador na base; ações grandes embaixo. | Passar, jogar carta selecionada, ver mão e Aumentar (amplifica a próxima ação com energia de turno, sem aposta); bots executam turnos e pontuação determina resultado. |
+1. Splash: marca central, cartas em leque, espaço escuro. Implementada durante restauração da sessão, com arte desenhada no Flutter.
+2. Login: marca, campos e ações empilhados. E-mail/senha e convidado; botões Google/Apple da imagem omitidos por solicitação do usuário.
+3. Início: avatar/XP/saldo, faixa de temporada, ações verdes/azuis, atalhos e menu inferior. Mesa central adicionada conforme pedido textual.
+4. Seleção de mesas: cinco níveis e entradas, medalhas e ação de entrar. Nenhum número fictício de jogadores online.
+5. Partida: feltro verde, quatro assentos, cartas claras, placar e desafios coloridos. Adaptada para paisagem, com mão privada e indicador de vez.
+6. Sala privada: 1v1/2v2, regra, senha opcional, código e criação. Não há espectadores; as conexões só recebem a própria mesa como participante.
+7. Amigos: busca, presença, pedidos e convite; perfis e remoção em menu contextual.
+8. Ranking: abas global/semanal/amigos, posição, nome, nível, vitórias e pontos. Dados reais.
+9. Perfil: avatar, ID, XP, estatísticas, personalização e conquistas.
+10. Carteira: saldo destacado, ganhos/gastos, bônus e extrato. Botão comprar fichas da imagem não implementado, pois não há compra por dinheiro.
+11. Loja: categorias e cartões de itens. Avatares são monogramas e símbolos originais, não retratos copiados da imagem.
+12. Torneios: inscrições, progresso e chave expansível, gerados com participantes reais.
+13. Histórico: resultados, data, placar e XP; estado vazio informativo antes da primeira partida.
+14. Configurações: conexão, regras, informações de conta e saída. Não há configurações de notificações sem serviço correspondente.
+15. Mais: conteúdo consolidado em Configurações.
 
-## Sistema visual
-
-- Área de projeto 1672 × 941, redimensionada proporcionalmente usando LayoutBuilder e MediaQuery, respeitando área segura.
-- Azul profundo #001438, azul vivo #064DB7, dourado claro #FFF1AC, ouro #F6BD41 e verde #00C63C.
-- Molduras com gradiente metálico, filete interno azul, brilho superior e sombra escura; textos claros serifados.
-- Fundo, mesa, emblema, cartas e ornamentos desenhados em Flutter. Nenhuma captura usada como fundo e nenhum recurso extraído dos jogos.
-- Retratos são substituídos por avatares vetoriais originais; símbolos figurativos complexos por ícones Material. Diferenças deliberadas para não copiar recursos protegidos.
+As fontes Inter e Cormorant Garamond têm licenças OFL incluídas. Logo, naipes, feltro e versos são widgets/CustomPainter sem fundo de imagem; não há quadriculado falso. Não é necessário substituir arquivo de logo. Se futuramente desejar retratos ilustrados, substitua a implementação `PlayerAvatar` por arquivos próprios/licenciados. Os PNGs antigos do poker permanecem como arquivos históricos, mas não são empacotados no aplicativo.

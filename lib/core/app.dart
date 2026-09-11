@@ -3,10 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../theme/royal_theme.dart';
-import '../widgets/royal_widgets.dart';
-import '../models/game.dart';
-import '../services/room_service.dart';
+import '../services/truco_service.dart';
+import '../widgets/truco_widgets.dart';
 part '../screens/home/home_screen.dart';
 part '../screens/profile/profile_screen.dart';
 part '../screens/private_room/private_room_screen.dart';
@@ -14,338 +12,541 @@ part '../screens/friends/friends_screen.dart';
 part '../screens/game_modes/game_modes_screen.dart';
 part '../screens/room_lobby/room_lobby_screen.dart';
 part '../screens/match/match_screen.dart';
+part '../screens/community_screens.dart';
 
 class AuroraApp extends StatefulWidget {
-  final String initialScreen;
-  const AuroraApp({super.key, this.initialScreen = 'home'});
+  final TrucoService? service;
+  const AuroraApp({super.key, this.service});
   @override
   State<AuroraApp> createState() => _AuroraAppState();
 }
 
 class _AuroraAppState extends State<AuroraApp> {
-  final navigatorKey = GlobalKey<NavigatorState>();
-  late String screen;
-  String name = 'Gustavo',
-      roomName = 'Sala do Gustavo',
-      code = 'DEMO01',
-      mode = 'Partida rápida';
-  bool sound = true, private = true, ready = true, busy = false;
-  int capacity = 4;
-  final friends = <Friend>[
-    const Friend('Rafael', 8, true),
-    const Friend('Lívia', 12, true),
-    const Friend('Bruno', 5, false),
-    const Friend('Marina', 10, false),
-  ];
-  final requests = <Friend>[
-    const Friend('Lucas', 7, true),
-    const Friend('Fernanda', 3, true),
-  ];
-  final roomNameInput = TextEditingController(text: 'Sala do Gustavo');
+  late final TrucoService api;
+  final messenger = GlobalKey<ScaffoldMessengerState>();
+  final navigator = GlobalKey<NavigatorState>();
+  String screen = 'home', authMode = 'login', rankingMode = 'global';
+  String rule = 'paulista', shopTab = 'avatar';
+  int capacity = 2;
+  bool busy = false, restoring = true, showPassword = false;
+  void refreshUI(VoidCallback callback) {
+    if (mounted) setState(callback);
+  }
+
+  Map<String, dynamic> extra = {}, room = {};
+  final nameInput = TextEditingController();
+  final emailInput = TextEditingController();
+  final passwordInput = TextEditingController();
+  final roomInput = TextEditingController(text: 'Mesa dos amigos');
   final codeInput = TextEditingController();
+  final roomPassword = TextEditingController();
   final searchInput = TextEditingController();
-  final roomService = RoomService();
-  DemoGame? game;
-  Timer? botTimer;
-  int gamesPlayed = 12, wins = 7, points = 350;
-  bool recorded = false;
+  Map<String, dynamic> get me =>
+      Map<String, dynamic>.from(api.data['profile'] as Map? ?? {});
+  Map<String, dynamic> get equipped =>
+      Map<String, dynamic>.from(me['equipped'] as Map? ?? {});
+  String get uid => me['id'] as String? ?? '';
+  String get playerName => me['name'] as String? ?? 'Jogador';
   @override
   void initState() {
     super.initState();
-    screen = widget.initialScreen;
-    if (screen == 'match') {
-      game = DemoGame();
-      game!.addListener(gameChanged);
-    }
-  }
-
-  void refresh(VoidCallback callback) {
-    if (mounted) {
-      setState(callback);
-    }
-  }
-
-  void go(String route) {
-    if (screen == 'match' && route != 'match') {
-      botTimer?.cancel();
-    }
-    refresh(() => screen = route);
-  }
-
-  void gameChanged() {
-    if (!mounted) {
-      return;
-    }
-    if (game!.finished && !recorded) {
-      recorded = true;
-      gamesPlayed++;
-      points += game!.chips[0];
-      if (game!.chips[0] >= 1000) {
-        wins++;
-      }
-    }
-    setState(() {});
-  }
-
-  void startGame() {
-    botTimer?.cancel();
-    game?.removeListener(gameChanged);
-    game?.dispose();
-    game = DemoGame(playerCount: capacity);
-    recorded = false;
-    game!.addListener(gameChanged);
-    go('match');
-  }
-
-  void action({bool pass = false}) {
-    if (pass) {
-      game!.check();
+    api = widget.service ?? TrucoService();
+    api.addListener(changed);
+    if (api.token != null) {
+      restoring = false;
     } else {
-      game!.call();
+      restore();
     }
   }
 
-  BuildContext get dialogContext => navigatorKey.currentContext!;
-  void info(String title, String message) {
-    showDialog<void>(
-      context: dialogContext,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('ENTENDI'),
-          ),
-        ],
+  Future<void> restore() async {
+    try {
+      await api.restore();
+    } catch (e) {
+      message(e);
+    } finally {
+      if (mounted) setState(() => restoring = false);
+    }
+  }
+
+  void changed() {
+    if (!mounted) return;
+    final incoming = api.data['room'];
+    setState(() {
+      if (incoming is Map) {
+        final started =
+            room['status'] != 'playing' || room['code'] != incoming['code'];
+        room = Map<String, dynamic>.from(incoming);
+        if (room['status'] == 'playing' && started && screen != 'match') {
+          screen = 'match';
+          orient(true);
+        }
+      }
+    });
+  }
+
+  void orient(bool match) {
+    SystemChrome.setPreferredOrientations(
+      match
+          ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : [
+              DeviceOrientation.portraitUp,
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ],
+    );
+  }
+
+  void message(Object e) {
+    messenger.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  void settings() {
-    showDialog<void>(
-      context: dialogContext,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Configurações'),
-        content: const Text(
-          'Aurora Cards · poker recreativo\nFichas internas da mão\nCheck, pagar, aumentar e desistir\nAs fichas não podem ser compradas, sacadas ou trocadas.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('VOLTAR'),
-          ),
-        ],
-      ),
-    );
+  Future<void> run(Future<void> Function() task) async {
+    if (busy) return;
+    setState(() => busy = true);
+    try {
+      await task();
+    } catch (e) {
+      message(e);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> go(String target) async {
+    orient(target == 'match');
+    setState(() {
+      screen = target;
+      extra = {};
+    });
+    if (['friends', 'ranking', 'shop', 'tournaments'].contains(target)) {
+      await run(() async {
+        final result = await api.request(
+          'api/$target${target == 'ranking' ? '?mode=$rankingMode' : ''}',
+        );
+        if (mounted && screen == target) setState(() => extra = result);
+      });
+    } else if (api.token != null) {
+      await run(api.refresh);
+    }
+  }
+
+  Future<void> enterRoom(String path, Map<String, dynamic> body) async {
+    await run(() async {
+      final result = await api.request('api/rooms/$path', body);
+      if (mounted) {
+        setState(() {
+          room = result;
+          screen = result['status'] == 'playing' ? 'match' : 'lobby';
+        });
+      }
+      orient(screen == 'match');
+      await api.refresh();
+    });
+  }
+
+  Future<void> mutation(
+    String path,
+    Map<String, dynamic> body, {
+    bool reload = false,
+  }) async {
+    await run(() async {
+      final response = await api.request('api/$path', body);
+      if (reload && mounted) setState(() => extra = response);
+      await api.refresh();
+    });
   }
 
   @override
   void dispose() {
-    botTimer?.cancel();
-    game?.removeListener(gameChanged);
-    game?.dispose();
-    roomNameInput.dispose();
-    codeInput.dispose();
-    searchInput.dispose();
+    api.removeListener(changed);
+    if (widget.service == null) api.dispose();
+    for (final c in [
+      nameInput,
+      emailInput,
+      passwordInput,
+      roomInput,
+      codeInput,
+      roomPassword,
+      searchInput,
+    ]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => MaterialApp(
+    title: 'Aurora Truco',
     debugShowCheckedModeBanner: false,
-    title: 'Aurora Cards',
-    theme: royalTheme,
-    navigatorKey: navigatorKey,
+    scaffoldMessengerKey: messenger,
+    navigatorKey: navigator,
+    theme: ThemeData(
+      fontFamily: 'Inter',
+      brightness: Brightness.dark,
+      useMaterial3: true,
+      scaffoldBackgroundColor: ink,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: green,
+        brightness: Brightness.dark,
+        primary: green,
+        secondary: gold,
+        surface: panelColor,
+      ),
+      appBarTheme: const AppBarTheme(backgroundColor: ink, centerTitle: true),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFF091D26),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        contentPadding: const EdgeInsets.all(14),
+      ),
+      textTheme: const TextTheme(
+        titleLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        titleMedium: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+      ),
+    ),
     home: Builder(
-      builder: (context) => PopScope(
-        canPop: screen == 'home',
-        onPopInvokedWithResult: (didPop, result) {
-          if (!didPop) {
-            go('home');
-          }
-        },
-        child: Scaffold(
-          resizeToAvoidBottomInset: false,
-          body: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final media = MediaQuery.of(context);
-                final width = constraints.maxWidth;
-                final height = constraints.maxHeight;
-                return Center(
-                  child: SizedBox(
-                    width: width,
-                    height: height,
-                    child: FittedBox(
-                      fit: BoxFit.contain,
-                      child: MediaQuery(
-                        data: media.copyWith(textScaler: TextScaler.noScaling),
-                        child: SizedBox(
-                          width: 1672,
-                          height: 941,
-                          child: CustomPaint(
-                            painter: RoyalBackground(
-                              sweeping: screen == 'home',
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                32,
-                                22,
-                                32,
-                                30,
-                              ),
-                              child: screen == 'home'
-                                  ? homeScreen()
-                                  : screen == 'match'
-                                  ? matchScreen()
-                                  : Column(
-                                      children: [
-                                        header(),
-                                        const SizedBox(height: 20),
-                                        Expanded(
-                                          child: switch (screen) {
-                                            'profile' => profileScreen(),
-                                            'private' => privateRoomScreen(),
-                                            'friends' => friendsScreen(),
-                                            'modes' => modesScreen(),
-                                            'lobby' => lobbyScreen(),
-                                            _ => homeScreen(),
-                                          },
-                                        ),
-                                        if (screen != 'lobby') ...[
-                                          const SizedBox(height: 28),
-                                          bottomBar(),
-                                        ],
-                                      ],
-                                    ),
-                            ),
+      builder: (context) {
+        if (restoring) {
+          return const Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TrucoLogo(),
+                  SizedBox(height: 24),
+                  CircularProgressIndicator(),
+                ],
+              ),
+            ),
+          );
+        }
+        if (api.token == null) return loginScreen();
+        final match = screen == 'match';
+        return PopScope(
+          canPop: screen == 'home',
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop) {
+              go(match ? 'lobby' : 'home');
+            }
+          },
+          child: Scaffold(
+            appBar: match
+                ? null
+                : AppBar(
+                    leading: screen == 'home'
+                        ? null
+                        : IconButton(
+                            onPressed: () => go('home'),
+                            icon: const Icon(Icons.arrow_back_ios_new),
                           ),
-                        ),
+                    title: Text(
+                      {
+                            'home': 'AURORA TRUCO',
+                            'private': 'Sala privada',
+                            'modes': 'Escolha uma mesa',
+                            'lobby': 'Sua sala',
+                            'profile': 'Meu perfil',
+                            'friends': 'Amigos',
+                            'ranking': 'Ranking',
+                            'wallet': 'Minha carteira',
+                            'shop': 'Loja',
+                            'tournaments': 'Torneios',
+                            'history': 'Minhas partidas',
+                            'missions': 'Missões e conquistas',
+                            'settings': 'Configurações',
+                          }[screen] ??
+                          'Aurora',
+                    ),
+                    actions: [
+                      IconButton(
+                        onPressed: () => go('wallet'),
+                        tooltip: 'Carteira',
+                        icon: const Icon(Icons.monetization_on, color: gold),
+                      ),
+                      IconButton(
+                        onPressed: () => go('settings'),
+                        tooltip: 'Configurações',
+                        icon: const Icon(Icons.settings_outlined),
+                      ),
+                    ],
+                  ),
+            body: SafeArea(
+              child: Column(
+                children: [
+                  if (busy) const LinearProgressIndicator(minHeight: 2),
+                  if (!api.connected)
+                    Container(
+                      width: double.infinity,
+                      color: const Color(0xFF493F20),
+                      padding: const EdgeInsets.all(5),
+                      child: const Text(
+                        'Reconectando ao servidor…',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 11),
+                      ),
+                    ),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final body = switch (screen) {
+                          'home' => homeScreen(),
+                          'profile' => profileScreen(),
+                          'private' => privateScreen(),
+                          'friends' => friendsScreen(),
+                          'modes' => modesScreen(),
+                          'lobby' => lobbyScreen(),
+                          'match' => matchScreen(constraints),
+                          'ranking' => rankingScreen(),
+                          'wallet' => walletScreen(),
+                          'shop' => shopScreen(),
+                          'tournaments' => tournamentsScreen(),
+                          'history' => historyScreen(),
+                          'missions' => missionsScreen(),
+                          _ => settingsScreen(),
+                        };
+                        return match
+                            ? body
+                            : Align(
+                                alignment: Alignment.topCenter,
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 1100,
+                                  ),
+                                  child: SingleChildScrollView(
+                                    key: ValueKey(screen),
+                                    padding: EdgeInsets.all(
+                                      MediaQuery.sizeOf(context).width < 400
+                                          ? 12
+                                          : 20,
+                                    ),
+                                    child: body,
+                                  ),
+                                ),
+                              );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            bottomNavigationBar: match
+                ? null
+                : NavigationBar(
+                    height: 64,
+                    selectedIndex: [
+                      'home',
+                      'modes',
+                      'friends',
+                      'shop',
+                      'profile',
+                    ].indexOf(screen).clamp(0, 4),
+                    onDestinationSelected: (i) =>
+                        go(['home', 'modes', 'friends', 'shop', 'profile'][i]),
+                    destinations: const [
+                      NavigationDestination(
+                        icon: Icon(Icons.home_outlined),
+                        label: 'Início',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.style),
+                        label: 'Jogar',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.people_outline),
+                        label: 'Amigos',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.shopping_cart_outlined),
+                        label: 'Loja',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.person_outline),
+                        label: 'Perfil',
+                      ),
+                    ],
+                  ),
+          ),
+        );
+      },
+    ),
+  );
+
+  Widget loginScreen() => Scaffold(
+    body: SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 410),
+            child: Column(
+              children: [
+                const TrucoLogo(size: 180),
+                const SizedBox(height: 24),
+                const Text(
+                  'Amizade, estratégia e uma boa partida.',
+                  style: TextStyle(color: gold),
+                ),
+                const SizedBox(height: 24),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'login', label: Text('Entrar')),
+                    ButtonSegment(
+                      value: 'register',
+                      label: Text('Criar conta'),
+                    ),
+                  ],
+                  selected: {authMode},
+                  onSelectionChanged: (v) => setState(() => authMode = v.first),
+                ),
+                const SizedBox(height: 18),
+                if (authMode == 'register')
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: TextField(
+                      controller: nameInput,
+                      autofillHints: const [AutofillHints.nickname],
+                      decoration: const InputDecoration(
+                        labelText: 'Nome do jogador',
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-  Widget header() => SizedBox(
-    height: 120,
-    child: Row(
-      children: [
-        SizedBox(
-          width: 246,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: RoundButton(
-              icon: Icons.arrow_back,
-              onTap: () => go(screen == 'lobby' ? 'private' : 'home'),
-            ),
-          ),
-        ),
-        Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (screen == 'lobby') ...[
-                SizedBox(
-                  height: 80,
-                  child: FittedBox(child: RoyalTitle(roomName.toUpperCase())),
-                ),
-                GestureDetector(
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: code));
-                    info('Código copiado', code);
-                  },
-                  child: Text(
-                    'CÓDIGO: $code  ·  COPIAR',
-                    style: royalText(28, color: cream),
+                TextField(
+                  controller: emailInput,
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email],
+                  decoration: const InputDecoration(
+                    labelText: 'E-mail',
+                    prefixIcon: Icon(Icons.mail_outline),
                   ),
                 ),
-              ] else
-                RoyalTitle(switch (screen) {
-                  'profile' => 'PERFIL',
-                  'private' => 'SALA PRIVADA',
-                  'friends' => 'AMIGOS',
-                  'modes' => 'JOGAR',
-                  _ => 'AURORA CARDS',
-                }),
-            ],
-          ),
-        ),
-        RoundButton(
-          icon: sound ? Icons.volume_up : Icons.volume_off,
-          onTap: () {
-            refresh(() => sound = !sound);
-            if (sound) {
-              SystemSound.play(SystemSoundType.click);
-            }
-          },
-        ),
-        const SizedBox(width: 30),
-        RoundButton(icon: Icons.settings, onTap: settings),
-      ],
-    ),
-  );
-  Widget bottomBar() => SizedBox(
-    height: 126,
-    child: Row(
-      children: [
-        nav('INÍCIO', Icons.home, 'home'),
-        const SizedBox(width: 38),
-        nav('PERFIL', Icons.person, 'profile'),
-        const SizedBox(width: 38),
-        nav('SALA PRIVADA', Icons.people, 'private'),
-        const SizedBox(width: 38),
-        nav('AMIGOS', Icons.group, 'friends'),
-      ],
-    ),
-  );
-  Widget nav(String title, IconData icon, String route) => Expanded(
-    child: RoyalButton(
-      label: title,
-      icon: icon,
-      vertical: true,
-      greenButton: screen == route || (screen == 'modes' && route == 'home'),
-      onPressed: () => go(route),
-      fontSize: 30,
-    ),
-  );
-  Widget label(String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 12, top: 16),
-    child: Text(text, style: royalText(30)),
-  );
-  Widget progress() => Container(
-    width: double.infinity,
-    height: 24,
-    decoration: BoxDecoration(
-      color: navy,
-      border: Border.all(color: muted),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: FractionallySizedBox(
-      alignment: Alignment.centerLeft,
-      widthFactor: .46,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [cream, green, Color(0xFF038027)],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passwordInput,
+                  obscureText: !showPassword,
+                  autofillHints: const [AutofillHints.password],
+                  decoration: InputDecoration(
+                    labelText: 'Senha',
+                    helperText: authMode == 'register'
+                        ? 'Pelo menos 10 caracteres'
+                        : null,
+                    suffixIcon: IconButton(
+                      onPressed: () =>
+                          setState(() => showPassword = !showPassword),
+                      icon: Icon(
+                        showPassword ? Icons.visibility_off : Icons.visibility,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: GameButton(
+                    busy
+                        ? 'Conectando…'
+                        : authMode == 'login'
+                        ? 'ENTRAR'
+                        : 'CRIAR CONTA',
+                    icon: Icons.login,
+                    onPressed: busy
+                        ? null
+                        : () => run(
+                            () => api.login(authMode, {
+                              'email': emailInput.text,
+                              'password': passwordInput.text,
+                              'name': nameInput.text,
+                            }),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: GameButton(
+                    'Jogar como convidado',
+                    color: panelColor,
+                    onPressed: busy
+                        ? null
+                        : () => run(
+                            () => api.login('guest', {
+                              'name': nameInput.text.trim().length >= 2
+                                  ? nameInput.text.trim()
+                                  : 'Visitante',
+                            }),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Fichas virtuais para jogar e personalizar. Sem saque ou conversão em dinheiro.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     ),
   );
-  void achievements() {
-    info(
-      'Conquistas',
-      '♠ Primeiro passo — jogue sua primeira partida\n♛ Estrategista — alcance 300 pontos\n★ Em boa companhia — adicione 4 amigos\n✦ Persistência — conclua 10 partidas\nA próxima conquista chega com 20 partidas.',
-    );
-  }
+
+  Widget heading(String text) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 14),
+    child: Text(
+      text,
+      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+    ),
+  );
+  Widget stat(String label, String value) => TrucoPanel(
+    padding: const EdgeInsets.all(12),
+    child: Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 23,
+            fontWeight: FontWeight.bold,
+            color: gold,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    ),
+  );
+  Widget grid(List<Widget> children, {double minWidth = 150}) => LayoutBuilder(
+    builder: (context, c) {
+      final columns = (c.maxWidth / minWidth).floor().clamp(1, 4);
+      final width = (c.maxWidth - (columns - 1) * 12) / columns;
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          for (final child in children) SizedBox(width: width, child: child),
+        ],
+      );
+    },
+  );
+  Widget empty(String text, IconData icon) => TrucoPanel(
+    child: Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          Icon(icon, size: 40, color: gold),
+          const SizedBox(height: 12),
+          Text(text, textAlign: TextAlign.center),
+        ],
+      ),
+    ),
+  );
 }

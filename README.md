@@ -1,167 +1,124 @@
-# Aurora Cards
+# Aurora Truco Online
 
-Aplicativo Flutter/Dart recreativo para Android horizontal, inspirado nas sete referências fornecidas. Interface de widgets reais com navegação, formulários, amigos, lobby e partida local por turnos. **Não há apostas, dinheiro, fichas compráveis, depósitos, saques ou prêmios.**
+Conversão do projeto Aurora Cards/Poker para Flutter + Python. Login por e-mail/senha ou convidado, **sem Google**. Não há bots, dinheiro real, depósitos, compras de fichas com dinheiro nem saques.
 
-## Executar
+## Executar o backend
 
-Requisitos: Flutter 3.47.3 / Dart 3.13 ou compatível, Python 3.10+ para o servidor opcional e Android SDK para Android.
-
-```powershell
-flutter pub get
-flutter run
-```
-
-Para visualizar no navegador:
+Python 3.13 ou superior. Na pasta do projeto:
 
 ```powershell
-flutter run -d chrome
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+$env:DATABASE_URL = "postgresql+psycopg://USUARIO:SENHA@HOST:5432/BANCO"
+.\.venv\Scripts\python server/server.py --host 0.0.0.0 --port 8000
 ```
 
-O Android utiliza `sensorLandscape`, área segura e modo imersivo. `LayoutBuilder` e `MediaQuery` dimensionam uma área 1672 × 941 proporcionalmente; telas com outra proporção recebem margens para preservar a composição. A interface foi testada em 1672×941, 844×390 e 1280×800.
+As tabelas são criadas automaticamente. Para desenvolvimento rápido, sem `DATABASE_URL`, usa SQLite em `truco.db`. **No Render configure PostgreSQL**, pois o disco temporário do serviço não preserva SQLite em novos deploys. Não publique `.env`, senhas ou tokens no GitHub. `.env.example` é um exemplo; configure variáveis no terminal/Render, o arquivo não é carregado automaticamente.
 
-## Servidor Python e onde colocar o link
-
-### Publicar no Render
-
-O repositório já inclui `render.yaml`. No GitHub, abra o repositório do projeto e confirme que `server/server.py`, `requirements.txt` e `render.yaml` foram enviados. No Render, escolha **New → Web Service → Build and deploy from a Git repository**, conecte o GitHub, selecione este repositório e confirme:
-
-```text
-Build Command: pip install -r requirements.txt
-Start Command: python server/server.py --host 0.0.0.0 --port $PORT
-Health Check Path: /health
-```
-
-O plano gratuito pode dormir após inatividade. Quando o serviço ficar com status **Live**, copie a URL HTTPS, parecida com `https://aurora-cards-server.onrender.com`, e compile o aplicativo apontando para ela:
+Alternativa local com Docker e PostgreSQL:
 
 ```powershell
-flutter build apk --release --dart-define=SERVER_URL=https://aurora-z5xt.onrender.com
+$env:POSTGRES_PASSWORD = "defina-uma-senha-forte"
+docker compose up --build
 ```
 
-Não acrescente `/rooms` ao endereço. Teste a instalação com `https://sua-url.onrender.com/health`; a resposta esperada é JSON com `status: ok`. O banco de salas atual fica em memória e reiniciar o serviço apaga as salas. Para produção, adicione persistência e autenticação.
+HTTP: `/health`; documentação interativa da API: `/docs`; WebSocket: `/ws`. O primeiro frame WebSocket deve ser `{"token":"TOKEN_DA_SESSAO"}`. Cartas de outros jogadores nunca são enviadas. A API REST usa `Authorization: Bearer TOKEN`.
 
-Servidor sem dependências externas:
+## Atualizar seu Render
+
+1. Envie os arquivos modificados deste projeto ao repositório `fxzazx/aurora` (incluindo `server/`, `requirements.txt` e `render.yaml`).
+2. Crie/associe um PostgreSQL no Render. No serviço web, em **Environment**, adicione `DATABASE_URL` com a **Internal Database URL** do banco. URLs começando por `postgres://` ou `postgresql://` são aceitas.
+3. **Build Command:** `pip install -r requirements.txt`
+4. **Start Command:** `python server/server.py --host 0.0.0.0 --port $PORT`
+5. **Health Check Path:** `/health`. Use **uma instância e um worker**; a autoridade e as conexões WebSocket ficam nesse processo. Não aumente workers sem implementar coordenação distribuída.
+6. Faça **Manual Deploy → Deploy latest commit**.
+7. Abra `https://aurora-z5xt.onrender.com/health`. O backend novo deve retornar `{"status":"ok","app":"Aurora Truco","version":2}`. Se não houver `version: 2`, você ainda está usando o servidor antigo.
+
+O `render.yaml` preserva o comando anterior. Em instalação por Blueprint, ele solicitará `DATABASE_URL`. Ele não cria nem contrata banco automaticamente. Consulte no painel do Render as condições do plano escolhido. O aplicativo tenta reconectar quando o servidor reinicia; a primeira requisição tem timeout de 60 segundos.
+
+## Onde colocar a URL no aplicativo
+
+O padrão já é **https://aurora-z5xt.onrender.com**, em `lib/services/truco_service.dart`, constante `defaultUrl`. Você pode substituir **sem editar código**:
 
 ```powershell
-python server/server.py --host 0.0.0.0 --port 8080
+flutter run --dart-define=SERVER_URL=https://aurora-z5xt.onrender.com
 ```
 
-**O link é configurado na variável de compilação `SERVER_URL`.** A leitura está em `lib/services/room_service.dart`, na constante `RoomService.serverUrl`.
+Não adicione `/health`, `/api`, `/rooms` ou Markdown à URL. O aplicativo acrescenta os caminhos corretos. Se usar o backend no computador com emulador Android: `http://10.0.2.2:8000`. Em aparelho físico, use o IP local do computador na mesma rede. HTTP local funciona no Android debug; prefira HTTPS em distribuição.
 
-```powershell
-# Emulador Android, servidor no computador:
-flutter run --dart-define=SERVER_URL=http://10.0.2.2:8080
+## Gerar o APK no Windows
 
-# Celular Android na mesma rede (substitua pelo IP do computador):
-flutter run --dart-define=SERVER_URL=http://192.168.1.100:8080
-
-# Servidor hospedado com HTTPS:
-flutter run --dart-define=SERVER_URL=https://seu-servidor.exemplo.com
-
-# Navegador local:
-flutter run -d chrome --dart-define=SERVER_URL=http://localhost:8080
-```
-
-Não adicione `/rooms` ao link. Reinicie/recompile o app após alterar `SERVER_URL`. A versão debug Android permite HTTP para desenvolvimento; use HTTPS para APK release. No celular, `localhost` se refere ao celular, não ao computador. Para acessar pela rede, a porta 8080 precisa estar liberada no firewall do computador.
-
-Sem `SERVER_URL`, as salas são guardadas na memória do aplicativo e podem ser reabertas pelo código **na mesma execução**. Com o servidor, outro dispositivo pode localizar o cadastro da sala pelo código. O servidor fornece:
-
-- `GET /health`: diagnóstico;
-- `POST /rooms`: cria sala com `name`, `capacity` (2–4) e `private`;
-- `POST /rooms/{codigo}/join`: localiza sala pelo código.
-
-Salas expiram após seis horas e são perdidas ao reiniciar o servidor. A opção “somente convidados” registra a intenção de acesso por código. Esta API demonstrativa não possui autenticação, lista de convidados verificada ou persistência.
-
-**Escopo online:** o servidor cadastra e localiza salas. Lobby, amigos, prontidão e partidas são demonstrativos locais; não há sincronização de turnos entre dispositivos ou matchmaking real. “Partida rápida” inicia uma mesa com bots claramente identificados. Os convites da lista são simulações locais. Para implementar multiplayer real, é necessário acrescentar identidade de jogadores e protocolo de estado/turnos autoritativo ao servidor.
-
-## Como jogar
-
-1. Início → Jogar → selecione 2, 3 ou 4 participantes.
-2. Abra Partida rápida ou Contra bots e inicie pelo lobby. Modo treino abre a mesa com instruções.
-3. Toque em uma carta da mão para selecioná-la. “Ver mão” permite escolher entre as três cartas e mostra sua força.
-4. **Jogar carta** soma sua força ao placar e entrega o turno aos bots.
-5. **Aumentar** gasta uma energia e acrescenta 5 de força à próxima carta, até duas vezes por turno. Não representa aposta. A energia começa em 3, recupera 1 a cada rodada e não pode ser comprada.
-6. **Passar** não soma pontos e recupera uma energia. O aumento preparado é descartado ao passar.
-7. Após cinco rodadas, o maior placar vence. O resultado atualiza o perfil durante a sessão.
-
-## Telas e organização
-
-```text
-lib/
-  main.dart
-  core/app.dart                 # navegação e estado da demonstração
-  models/game.dart              # cartas, amigos e regras de turnos
-  services/room_service.dart    # HTTP e salas locais; SERVER_URL
-  theme/royal_theme.dart        # cores, fonte e tema
-  widgets/royal_widgets.dart    # botões, painéis, títulos, cartas e painters
-  screens/
-    home/
-    profile/
-    private_room/
-    friends/
-    game_modes/
-    room_lobby/
-    match/
-server/                        # servidor e testes Python
-assets/fonts/                  # Cormorant Garamond, licença OFL inclusa
-assets/images/aurora-logo.png   # emblema original gerado para este projeto
-```
-
-As telas usam `part` para compartilhar o estado da demonstração na biblioteca `core/app.dart`. Não há captura de referência no bundle. `Stack/Positioned` são usados para a mesa e para sobrepor o campo editável aos seis quadrados do código.
-
-## Recursos visuais substituíveis
-
-- **Logo:** substitua `assets/images/aurora-logo.png` por uma arte própria 1536×1024 (proporção 3:2). O arquivo atual é original, com fundo azul; o widget `Emblem` suaviza as bordas ao compor com o fundo. Não foi possível obter alpha real pela ferramenta de geração, portanto não é anunciado como PNG transparente.
-- **Avatares:** placeholders vetoriais originais no componente `Avatar`, em `lib/widgets/royal_widgets.dart`. Para retratos próprios, adicione `assets/images/avatar-01.webp` até `avatar-04.webp`, registre-os no `pubspec.yaml` e substitua o ícone no componente por `ClipOval(Image.asset(...))`. Tamanho sugerido: 256×256. Não foram copiados retratos das referências.
-- **Fundo, naipes, mesa, espadas e louros:** desenhados por `CustomPainter`, editáveis em `royal_widgets.dart`.
-- **Fonte:** Cormorant Garamond livre, com licença em `assets/fonts/OFL.txt`. Ela aproxima a tipografia serifada das referências, mas não é a mesma fonte.
-
-A composição, paleta e proporções seguem as referências; logo, retratos substitutos, ícones e regras são originais/adaptados. A reprodução não é pixel a pixel.
-
-## Testes e comparação visual
-
-```powershell
-flutter analyze
-flutter test
-python -m unittest discover -s server -v
-```
-
-Os testes cobrem limites do aumento, pontuação e fim da partida, salas locais, navegação e ausência de overflow nas sete telas em três tamanhos. Sete testes golden com fontes carregadas comparam a renderização com `test/goldens/*.png`.
-
-Para atualizar capturas **após revisar visualmente alterações intencionais**:
-
-```powershell
-flutter test test/visual_test.dart --update-goldens
-```
-
-A análise inicial individual está em `docs/referencias.md`. O relatório da comparação final e suas diferenças está em `docs/comparacao-visual.md`. Os goldens verificam regressões da implementação, não equivalência pixel a pixel às imagens fornecidas.
-
-### Caminhos com acentos no Windows
-
-Nesta instalação, `flutter analyze` apresentou um erro interno de JSON ao processar o caminho `Aplicações`. O projeto foi analisado usando um alias sem acentos para a mesma pasta:
+O caminho atual contém acentos. Se o analisador Dart falhar com `FormatException`, use um alias sem acentos. Verifique antes se `R:` já está associado a este projeto com `subst`.
 
 ```powershell
 subst R: "C:\Users\Gustavo\Downloads\Trabalhos\Aplicações\poker"
 Set-Location R:\
+flutter pub get
+flutter analyze
+flutter test
+flutter build apk --debug --dart-define=SERVER_URL=https://aurora-z5xt.onrender.com
+```
+
+APK: `build/app/outputs/flutter-apk/app-debug.apk`. Copie para o celular e instale. A identidade Android do projeto anterior foi mantida; a versão subiu para `2.0.0+2`. Este APK é para testes, assinado com a chave de desenvolvimento. Para publicar, configure sua chave de assinatura no Gradle antes de `flutter build appbundle --release`.
+
+Se o Gradle reclamar do NDK, no Android Studio abra **SDK Manager → SDK Tools → Show Package Details**, instale a versão solicitada e repita o build. Não é preciso instalar ferramentas C++ do Visual Studio para gerar APK Android.
+
+## iOS
+
+A pasta `ios/` está incluída. O build iOS exige macOS, Xcode e assinatura Apple:
+
+```bash
+flutter pub get
+flutter build ios --no-codesign --dart-define=SERVER_URL=https://aurora-z5xt.onrender.com
+```
+
+Abra `ios/Runner.xcworkspace` no Xcode, configure sua equipe e assinatura e gere o Archive. **O build iOS não foi executado no Windows.**
+
+## Testar o multiplayer de verdade
+
+1. Abra o aplicativo em dois dispositivos com a mesma URL de servidor.
+2. Crie contas diferentes, ou entre como convidados diferentes.
+3. Primeiro jogador: Sala privada → 1v1 → Criar sala.
+4. Segundo jogador: digite o código e a senha, se houver.
+5. O anfitrião inicia. Cada um recebe somente suas três cartas. Toque na carta quando for sua vez.
+6. Para 2v2, entre com quatro contas. Assentos 0/2 e 1/3 formam as duplas.
+7. Na partida rápida, selecione a mesma modalidade, regra e entrada; ela inicia automaticamente quando completar jogadores.
+
+Não há preenchimento automático com robôs. Salas vazias permanecem aguardando. Uma ação não respondida por três minutos causa derrota por inatividade. Uma sala aguardando sem atividade fecha após 15 minutos. O estado persiste e permite retomar após reinício do servidor. Não saia da conta durante uma partida: voltar exige a mesma conta; convidados dependem do token salvo no dispositivo.
+
+## Regras implementadas
+
+Paulista, baralho de 40 cartas, três cartas por jogador, melhor de três vazas, objetivo 12 pontos. Ordem natural: 4,5,6,7,Q,J,K,A,2,3. Vira define manilha; naipes das manilhas: ouros < espadas < copas < paus.
+
+Desafios 1 → 3 → 6 → 9 → 12. A dupla adversária aceita, corre ou aumenta; um aumento só é aplicado pelo servidor. Mão de onze permite ver o parceiro e escolher jogar por três ou correr por um; onze a onze usa cartas ocultas. Três empates não dão pontos. Há também **manilha fixa com pontuação paulista** (7♦, A♠, 7♥, 4♣); não é apresentada como regulamento mineiro.
+
+## Fichas, amigos, loja e torneios
+
+- Saldo inicial: 10.250. Entradas rápidas: 100, 500, 1.000, 5.000 e 10.000. Sala privada gratuita.
+- Vencedores recebem duas vezes a entrada +100 por jogador; derrotados perdem a entrada. Cada resultado é liquidado uma única vez em transação.
+- Vitória: 150 XP; derrota: 50 XP; nível a cada 1.000 XP.
+- Bônus diário: 300 fichas. Missão diária: três partidas/300 fichas. Missão semanal: cinco vitórias/1.500 fichas. Períodos em UTC.
+- Amigos reais, pedidos/aceitação/remoção, busca por nome/ID, convites com validade de cinco minutos. Salas com senha continuam exigindo a senha.
+- Ranking: 100 pontos por vitória; semanal usa vitórias da semana ISO em UTC; aba amigos mostra sua rede. Histórico e estatísticas persistidos.
+- Loja com avatares geométricos, molduras, versos, mesas, emotes e efeito de brilho. Passe Aurora custa apenas fichas e concede +100 fichas e 50 XP em cada bônus diário após a compra. Não há pagamento externo.
+- Torneios gratuitos 1v1 de 8/16/32 participantes, começam ao lotar e criam rodadas automaticamente. Campeão ganha tamanho ×250 fichas +1.000 XP. Chave acessível na tela Torneios.
+
+## Organização
+
+`lib/core/app.dart`: sessão, navegação e responsividade. `lib/screens/`: telas. `lib/widgets/truco_widgets.dart`: componentes e arte vetorial própria. `lib/services/truco_service.dart`: HTTP, armazenamento seguro e WebSocket.
+
+`server/engine.py`: regras puras; `server/api.py`: autenticação, salas, amigos, ranking, carteira, loja, torneios e transmissão; `server/security.py`: scrypt/tokens; `server/database.py`: persistência SQLAlchemy/PostgreSQL; `server/server.py`: entrada do processo.
+
+As contas usam senha com sal e scrypt. Tokens aleatórios são guardados como hash no banco e com armazenamento seguro no Android/iOS. Login possui limite de tentativas por IP. O cliente não controla cartas, resultado, pontuação, XP ou saldo. Ações têm versão para impedir repetição de jogadas antigas. Não há login Google nem verificação/recuperação de e-mail implementada.
+
+## Testes e limites de validação
+
+```powershell
+.\.venv\Scripts\python -m pytest server/test_truco.py -q
 flutter analyze
 flutter test
 ```
 
-Se R: já estiver em uso, escolha outra letra. Ao terminar e após sair de R:, `subst R: /D` remove somente o alias, sem apagar os arquivos.
+Testes cobrem partidas completas 1v1/2v2, WebSocket com contas distintas, privacidade da mão, ações antigas, permissões, carteira, loja, amizades, senha da sala, empates, desafios e torneios. Testes de backend usam SQLite isolado; o adaptador PostgreSQL é fornecido, mas precisa ser validado contra o seu banco antes de disponibilizar publicamente. Flutter testa navegação, estados e layouts em retrato/paisagem, com imagens de comparação.
 
-## Gerar APK
-
-Neste ambiente, a tentativa de build parou com **No Android SDK found**. Não foi gerado APK.
-
-Instale o Android SDK pelo Android Studio, incluindo Android SDK Platform, Platform Tools, Command-line Tools e Build Tools. Depois:
-
-```powershell
-flutter config --android-sdk "C:\Users\SEU_USUARIO\AppData\Local\Android\Sdk"
-flutter doctor --android-licenses
-flutter doctor
-flutter build apk --debug
-
-# APK otimizado com servidor HTTPS:
-flutter build apk --release --dart-define=SERVER_URL=https://aurora-z5xt.onrender.com
-```
-
-Saídas: `build/app/outputs/flutter-apk/app-debug.apk` ou `app-release.apk`. O template de assinatura ainda usa a chave debug; configure seu keystore em `android/app/build.gradle.kts` antes de distribuir uma release assinada. Para instalar em aparelho autorizado via USB: `flutter install`.
+Este projeto entrega o fluxo jogável e persistente em um servidor único. Operação comercial em larga escala ainda exige teste de carga, moderação/antifraude de contas, recuperação de acesso, política de privacidade própria, backups operacionais e coordenação entre múltiplas instâncias. Nenhum deploy no seu Render ou envio ao GitHub é feito automaticamente por gerar o APK.

@@ -2,88 +2,163 @@ part of '../../core/app.dart';
 
 extension _HomeScreen on _AuroraAppState {
   Widget homeScreen() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      SizedBox(
-        height: 124,
+      Row(
+        children: [
+          PlayerAvatar(
+            playerName,
+            cosmetic: equipped['avatar'],
+            frame: equipped['frame'],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  playerName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                Text(
+                  'Nível ${me['level']} • ${me['xp']} XP',
+                  style: const TextStyle(fontSize: 12, color: Colors.white60),
+                ),
+                const SizedBox(height: 6),
+                LinearProgressIndicator(
+                  value: ((me['xp'] as num? ?? 0) % 1000) / 1000,
+                  minHeight: 6,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          TextButton.icon(
+            onPressed: () => go('wallet'),
+            icon: const Icon(Icons.monetization_on, color: gold),
+            label: Text(
+              number(api.data['chips']),
+              style: const TextStyle(color: gold, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 20),
+      TrucoPanel(
+        color: const Color(0xFF4D3519),
         child: Row(
           children: [
-            GestureDetector(
-              onTap: () => go('profile'),
-              child: SizedBox(
-                width: 410,
-                child: Row(
+            const Icon(Icons.workspace_premium, color: gold, size: 48),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'TEMPORADA AURORA',
+                    style: TextStyle(color: gold, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'Sua próxima grande jogada começa aqui.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: () => go('shop'),
+              child: const Text('VER PASSE', style: TextStyle(color: gold)),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 20),
+      SizedBox(
+        height: 175,
+        child: CustomPaint(
+          painter: FeltPainter(purple: equipped['table'] == 'table-1'),
+          child: const Center(child: TrucoLogo(size: 112)),
+        ),
+      ),
+      const SizedBox(height: 20),
+      Row(
+        children: [
+          Expanded(
+            child: GameButton(
+              'JOGAR',
+              icon: Icons.play_arrow,
+              onPressed: () => go('modes'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: GameButton(
+              'SALA PRIVADA',
+              icon: Icons.lock_outline,
+              color: const Color(0xFF0064CB),
+              onPressed: () => go('private'),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
+      grid([
+        for (final item in [
+          ('TORNEIOS', Icons.emoji_events, 'tournaments'),
+          ('RANKING', Icons.bar_chart, 'ranking'),
+          ('AMIGOS', Icons.people, 'friends'),
+          ('LOJA', Icons.shopping_cart, 'shop'),
+          ('PERFIL', Icons.person, 'profile'),
+          ('PARTIDAS', Icons.history, 'history'),
+        ])
+          TrucoPanel(
+            padding: EdgeInsets.zero,
+            child: InkWell(
+              onTap: () => go(item.$3),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
                   children: [
-                    const Avatar(size: 130),
-                    Expanded(
-                      child: GoldPanel(
-                        radius: 35,
-                        padding: const EdgeInsets.all(3),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(name, style: royalText(32)),
-                            Text('NÍVEL 1', style: royalText(20, color: gold)),
-                            const SizedBox(height: 4),
-                            progress(),
-                          ],
-                        ),
+                    Icon(item.$2, color: gold, size: 28),
+                    const SizedBox(height: 8),
+                    Text(
+                      item.$1,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-            const Spacer(),
-            RoundButton(
-              icon: sound ? Icons.volume_up : Icons.volume_off,
-              onTap: () => refresh(() => sound = !sound),
-            ),
-            const SizedBox(width: 30),
-            RoundButton(icon: Icons.settings, onTap: settings),
-          ],
+          ),
+      ], minWidth: 100),
+      const SizedBox(height: 16),
+      ListTile(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: gold),
         ),
+        leading: const Icon(Icons.assignment, color: gold),
+        title: const Text('Missões e conquistas'),
+        subtitle: const Text('Jogue, evolua e ganhe fichas.'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => go('missions'),
       ),
-      Expanded(
-        child: Transform.translate(
-          offset: const Offset(0, -30),
-          child: const OverflowBox(maxHeight: 480, child: Emblem(width: 720)),
+      if (api.data['room'] != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: GameButton(
+            'VOLTAR À SALA',
+            onPressed: () =>
+                go(room['status'] == 'playing' ? 'match' : 'lobby'),
+          ),
         ),
-      ),
-      SizedBox(
-        width: 650,
-        height: 155,
-        child: RoyalButton(
-          label: 'JOGAR',
-          icon: Icons.sports_kabaddi,
-          greenButton: true,
-          fontSize: 72,
-          onPressed: () => go('modes'),
-        ),
-      ),
-      const SizedBox(height: 42),
-      SizedBox(
-        height: 145,
-        child: Row(
-          children: [
-            nav('PERFIL', Icons.person, 'profile'),
-            const SizedBox(width: 42),
-            nav('SALA PRIVADA', Icons.people, 'private'),
-            const SizedBox(width: 42),
-            nav('AMIGOS', Icons.group, 'friends'),
-            const SizedBox(width: 42),
-            Expanded(
-              child: RoyalButton(
-                label: 'CONQUISTAS',
-                icon: Icons.emoji_events,
-                vertical: true,
-                onPressed: achievements,
-              ),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 20),
     ],
   );
 }

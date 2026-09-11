@@ -1,13 +1,15 @@
 name: aurora_cards
-description: Jogo recreativo de cartas de ação e pontos sem valor monetário.
+description: Aurora Truco online com partidas autoritativas e fichas virtuais.
 publish_to: none
-version: 1.0.0+1
+version: 2.0.0+2
 environment:
   sdk: ^3.13.0
 dependencies:
   flutter:
     sdk: flutter
   http: ^1.6.0
+  web_socket_channel: ^3.0.3
+  flutter_secure_storage: ^10.0.0
   cupertino_icons: ^1.0.8
 dev_dependencies:
   flutter_test:
@@ -15,10 +17,10 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 flutter:
   uses-material-design: true
-  assets:
-    - assets/images/aurora-logo.png
-    - assets/images/aurora-emblem-transparent.png
   fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter.ttf
     - family: RoyalSerif
       fonts:
         - asset: assets/fonts/CormorantGaramond-Bold.ttf

@@ -1,215 +1,172 @@
 part of '../../core/app.dart';
 
 extension _FriendsScreen on _AuroraAppState {
-  Widget friendsScreen() => Row(
+  Widget friendsScreen() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Expanded(
-        child: GoldPanel(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SectionTitle('MEUS AMIGOS', size: 47),
-              Text('${friends.length} AMIGOS', style: royalText(28)),
-              const SizedBox(height: 10),
-              Expanded(
-                child: ListView.separated(
-                  itemCount: friends.length,
-                  separatorBuilder: (_, i) => const SizedBox(height: 8),
-                  itemBuilder: (context, i) {
-                    final friend = friends[i];
-                    return Container(
-                      height: 104,
-                      padding: const EdgeInsets.all(9),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: blue),
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF06337A), navy],
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Avatar(size: 80),
-                          const SizedBox(width: 18),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(friend.name, style: royalText(34)),
-                                Text(
-                                  'NÍVEL ${friend.level}',
-                                  style: royalText(24, color: muted),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Icon(
-                            Icons.circle,
-                            color: friend.online ? green : Colors.red,
-                            size: 21,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            friend.online ? 'ONLINE' : 'OFFLINE',
-                            style: royalText(18),
-                          ),
-                          const SizedBox(width: 18),
-                          SizedBox(
-                            width: 172,
-                            height: 69,
-                            child: RoyalButton(
-                              label: 'CONVIDAR',
-                              fontSize: 20,
-                              greenButton: true,
-                              onPressed: friend.online
-                                  ? () => info(
-                                      'Convite preparado',
-                                      'Compartilhe o código $code com ${friend.name} para entrar na mesa.',
-                                    )
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 135,
-                            height: 69,
-                            child: RoyalButton(
-                              label: 'PERFIL',
-                              fontSize: 20,
-                              onPressed: () => info(
-                                friend.name,
-                                'Nível ${friend.level} · jogador recreativo',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+      Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: searchInput,
+              decoration: const InputDecoration(
+                hintText: 'Nome ou ID do jogador',
+                prefixIcon: Icon(Icons.search),
               ),
-            ],
+            ),
           ),
-        ),
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: 'Buscar jogadores',
+            onPressed: busy
+                ? null
+                : () => run(() async {
+                    final result = await api.request(
+                      'api/friends?search=${Uri.encodeComponent(searchInput.text)}',
+                    );
+                    refreshUI(() => extra = result);
+                  }),
+            icon: const Icon(Icons.search, color: gold),
+          ),
+        ],
       ),
-      const SizedBox(width: 55),
-      Expanded(
-        child: GoldPanel(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              const SectionTitle('ADICIONAR AMIGO', size: 43),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: searchInput,
-                      style: royalText(28),
-                      decoration: const InputDecoration(
-                        hintText: 'NOME OU ID DO JOGADOR',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    width: 225,
-                    height: 78,
-                    child: RoyalButton(
-                      label: 'BUSCAR',
-                      icon: Icons.search,
-                      greenButton: true,
-                      fontSize: 26,
-                      onPressed: searchFriend,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 28),
-              const SectionTitle('CONVITES', size: 44),
-              Expanded(
-                child: ListView.separated(
-                  itemCount: requests.length,
-                  separatorBuilder: (_, i) => const SizedBox(height: 12),
-                  itemBuilder: (context, i) {
-                    final f = requests[i];
-                    return Container(
-                      height: 115,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: blue.withValues(alpha: .20),
-                        border: Border.all(color: blue),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        children: [
-                          const Avatar(size: 85),
-                          const SizedBox(width: 25),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(f.name, style: royalText(33)),
-                                Text(
-                                  'NÍVEL ${f.level}',
-                                  style: royalText(23, color: muted),
-                                ),
-                              ],
-                            ),
-                          ),
-                          SizedBox(
-                            width: 90,
-                            height: 75,
-                            child: RoyalButton(
-                              label: '✓',
-                              greenButton: true,
-                              onPressed: () => refresh(() {
-                                friends.add(f);
-                                requests.removeAt(i);
-                              }),
-                            ),
-                          ),
-                          const SizedBox(width: 24),
-                          SizedBox(
-                            width: 90,
-                            height: 75,
-                            child: RoyalButton(
-                              label: '×',
-                              red: true,
-                              onPressed: () =>
-                                  refresh(() => requests.removeAt(i)),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
+      if ((extra['results'] as List? ?? []).isNotEmpty) ...[
+        heading('Resultados'),
+        for (final p in extra['results']) friendRow(p, request: true),
+      ],
+      heading('Meus amigos'),
+      if ((extra['friends'] as List? ?? []).isEmpty)
+        empty(
+          'Seus amigos aparecerão aqui. Busque pelo nome ou compartilhe seu ID no perfil.',
+          Icons.people_outline,
+        ),
+      for (final p in extra['friends'] as List? ?? []) friendRow(p),
+      heading('Pedidos de amizade'),
+      if ((extra['requests'] as List? ?? []).isEmpty)
+        const Text(
+          'Nenhum pedido pendente.',
+          style: TextStyle(color: Colors.white54),
+        ),
+      for (final p in extra['requests'] as List? ?? [])
+        friendRow(p, accept: true),
+      heading('Convites para jogar'),
+      if ((extra['invites'] as List? ?? []).isEmpty)
+        const Text(
+          'Nenhum convite no momento.',
+          style: TextStyle(color: Colors.white54),
+        ),
+      for (final i in extra['invites'] as List? ?? [])
+        ListTile(
+          leading: const Icon(Icons.mail, color: gold),
+          title: Text(i['sender']),
+          subtitle: Text('Sala ${i['code']}'),
+          trailing: TextButton(
+            onPressed: () => enterRoom('join', {
+              'code': i['code'],
+              'password': roomPassword.text,
+            }),
+            child: const Text('Entrar'),
           ),
         ),
+      const SizedBox(height: 16),
+      TextButton.icon(
+        onPressed: () => go('friends'),
+        icon: const Icon(Icons.refresh),
+        label: const Text('Atualizar lista'),
       ),
     ],
   );
-  void searchFriend() {
-    final value = searchInput.text.trim();
-    if (value.isEmpty) {
-      info('Buscar amigo', 'Digite um nome ou ID.');
-      return;
-    }
-    if (friends.any((f) => f.name.toLowerCase() == value.toLowerCase())) {
-      info('Amigo encontrado', '$value já está na sua lista.');
-      return;
-    }
-    refresh(() => requests.add(Friend(value, 1, true)));
-    searchInput.clear();
-    info(
-      'Perfil demonstrativo encontrado',
-      'Um convite local de $value está disponível para aceitar.',
-    );
-  }
+  Widget friendRow(
+    dynamic p, {
+    bool request = false,
+    bool accept = false,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: TrucoPanel(
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        children: [
+          PlayerAvatar(p['name'], size: 42),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  p['name'],
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  p['online'] ? 'Online' : 'Offline',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: p['online'] ? green : Colors.white54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (request || accept)
+            IconButton(
+              tooltip: accept ? 'Aceitar pedido' : 'Adicionar amigo',
+              onPressed: busy
+                  ? null
+                  : () => mutation('friends', {
+                      'id': p['id'],
+                      'action': accept ? 'accept' : 'request',
+                    }, reload: true),
+              icon: Icon(accept ? Icons.check : Icons.person_add, color: green),
+            )
+          else
+            IconButton(
+              tooltip: 'Convidar para sala',
+              onPressed: room.isEmpty || busy
+                  ? null
+                  : () => run(() async {
+                      await api.request('api/invite', {
+                        'id': p['id'],
+                        'code': room['code'],
+                      });
+                      message('Convite enviado.');
+                    }),
+              icon: const Icon(Icons.mail_outline, color: gold),
+            ),
+          PopupMenuButton<String>(
+            onSelected: (v) {
+              if (v == 'remove') {
+                mutation('friends', {
+                  'id': p['id'],
+                  'action': 'remove',
+                }, reload: true);
+              } else {
+                showDialog<void>(
+                  context: navigator.currentContext!,
+                  builder: (c) => AlertDialog(
+                    title: Text(p['name']),
+                    content: Text(
+                      'Nível ${p['level']}\nVitórias: ${p['wins']}\nDerrotas: ${p['losses']}\nTaxa: ${p['win_rate']}%\nID: ${p['id']}',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(c),
+                        child: const Text('Fechar'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            },
+            itemBuilder: (c) => [
+              const PopupMenuItem(value: 'profile', child: Text('Ver perfil')),
+              if (!request)
+                const PopupMenuItem(
+                  value: 'remove',
+                  child: Text('Remover / recusar'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
 }

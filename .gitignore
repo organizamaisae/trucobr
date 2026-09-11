@@ -1,4 +1,11 @@
 # Miscellaneous
+.venv/
+*.db
+.env
+__pycache__/
+.pytest_cache/
+test/failures/
+dist/
 *.class
 *.log
 *.pyc
