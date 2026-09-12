@@ -19,6 +19,7 @@ peers = {}
 rates = {}
 ADMIN_EMAIL='gustavoluzmachado@gmail.com'
 
+
 def can_create(u):
     return (u.get('email') or '').strip().lower()==ADMIN_EMAIL and u.get('tournament_admin') is True
 
