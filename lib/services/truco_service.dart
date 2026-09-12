@@ -46,7 +46,7 @@ class TrucoService extends ChangeNotifier {
       result = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
     } catch (_) {
       throw Exception(
-        'O servidor respondeu em formato inválido. Verifique a URL e o deploy.',
+        'Não foi possível concluir a comunicação. Tente novamente em instantes.',
       );
     }
     if (response.statusCode >= 400) {

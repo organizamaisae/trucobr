@@ -1,58 +1,6 @@
 part of '../core/app.dart';
 
 extension _CommunityScreens on _AuroraAppState {
-  Future<void> createTournament() async {
-    final input = tournamentNameInput..clear();
-    int size = 8;
-    final result = await showDialog<Map<String, dynamic>>(
-      context: navigator.currentContext!,
-      builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
-          title: const Text('Criar torneio'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: input,
-                maxLength: 50,
-                decoration: const InputDecoration(labelText: 'Nome do torneio'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
-                initialValue: size,
-                decoration: const InputDecoration(labelText: 'Jogadores'),
-                items: [
-                  for (final n in [8, 16, 32])
-                    DropdownMenuItem(value: n, child: Text('$n jogadores')),
-                ],
-                onChanged: (v) => update(() => size = v!),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Inscrição gratuita. Inicia quando completar os jogadores. Recompensas exclusivamente virtuais.',
-                style: TextStyle(fontSize: 12),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () =>
-                  Navigator.pop(c, {'name': input.text.trim(), 'size': size}),
-              child: const Text('Publicar'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (result != null) {
-      await mutation('tournaments/create', result, reload: true);
-    }
-  }
-
   Future<void> activateAdmin() async {
     final input = adminCodeInput..clear();
     final code = await showDialog<String>(
@@ -399,11 +347,15 @@ extension _CommunityScreens on _AuroraAppState {
                         'table' => SizedBox(
                           width: 110,
                           height: 70,
-                          child: CustomPaint(
-                            painter: FeltPainter(
-                              purple: item['id'] == 'table-1',
-                            ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: BarTable(table: item['id']),
                           ),
+                        ),
+                        'frame' => PlayerAvatar(
+                          playerName,
+                          size: 68,
+                          frame: item['id'],
                         ),
                         _ => Icon(
                           shopTab == 'frame'
@@ -451,134 +403,6 @@ extension _CommunityScreens on _AuroraAppState {
     );
   }
 
-  Widget tournamentsScreen() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      if (api.data['can_create_tournaments'] == true)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: GameButton(
-            'CRIAR TORNEIO',
-            icon: Icons.add,
-            color: gold,
-            onPressed: busy ? null : createTournament,
-          ),
-        ),
-      if (!busy && (extra['tournaments'] as List? ?? []).isEmpty)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: empty(
-            'Nenhum torneio publicado. Quando o administrador criar um evento, ele aparecerá aqui.',
-            Icons.emoji_events_outlined,
-          ),
-        ),
-      const Text(
-        'Mata-mata 1v1 • inscrições gratuitas\nInício automático com 8, 16 ou 32 jogadores reais.',
-        style: TextStyle(color: Colors.white60),
-      ),
-      const SizedBox(height: 16),
-      for (final t in extra['tournaments'] as List? ?? [])
-        Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: TrucoPanel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.emoji_events, color: gold, size: 38),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${t['name'] ?? 'Torneio'} • ${t['size']} jogadores',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            '${(t['players'] as List).length}/${t['size']} • ${t['status'] == 'waiting'
-                                ? 'Inscrições abertas'
-                                : t['status'] == 'playing'
-                                ? 'Em andamento'
-                                : 'Encerrado'}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          Text(
-                            'Campeão: ${number(t['size'] * 250)} fichas + 1.000 XP',
-                            style: const TextStyle(fontSize: 11, color: gold),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (t['status'] == 'waiting')
-                  GameButton(
-                    (t['players'] as List).contains(uid)
-                        ? 'CANCELAR INSCRIÇÃO'
-                        : 'PARTICIPAR',
-                    onPressed: busy
-                        ? null
-                        : () => mutation('tournaments', {
-                            'id': t['id'],
-                            'action': (t['players'] as List).contains(uid)
-                                ? 'leave'
-                                : 'join',
-                          }, reload: true),
-                  ),
-                if ((t['rounds'] as List).isNotEmpty)
-                  ExpansionTile(
-                    title: const Text('Chave do torneio'),
-                    children: [
-                      for (int i = 0; i < (t['rounds'] as List).length; i++)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              'Rodada ${i + 1}',
-                              style: const TextStyle(color: gold),
-                            ),
-                            for (final m in t['rounds'][i])
-                              ListTile(
-                                dense: true,
-                                title: Text(
-                                  (m['players'] as List)
-                                      .map((id) => extra['names']?[id] ?? id)
-                                      .join(' × '),
-                                ),
-                                subtitle: Text(
-                                  m['winner'] == null
-                                      ? 'Em disputa'
-                                      : 'Vencedor: ${extra['names']?[m['winner']] ?? m['winner']}',
-                                ),
-                                trailing:
-                                    (m['players'] as List).contains(uid) &&
-                                        m['winner'] == null
-                                    ? IconButton(
-                                        onPressed: () => enterRoom('state', {
-                                          'code': m['room'],
-                                        }),
-                                        icon: const Icon(Icons.play_arrow),
-                                      )
-                                    : null,
-                              ),
-                          ],
-                        ),
-                    ],
-                  ),
-              ],
-            ),
-          ),
-        ),
-      TextButton.icon(
-        onPressed: () => go('tournaments'),
-        icon: const Icon(Icons.refresh),
-        label: const Text('Atualizar torneios'),
-      ),
-    ],
-  );
   Widget settingsScreen() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -589,23 +413,6 @@ extension _CommunityScreens on _AuroraAppState {
           icon: Icons.admin_panel_settings,
           onPressed: activateAdmin,
         ),
-      TrucoPanel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Conexão',
-              style: TextStyle(color: gold, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            SelectableText(api.url),
-            Text(api.connected ? 'Servidor conectado' : 'Reconectando…'),
-            const SizedBox(height: 12),
-            GameButton('RECONECTAR', onPressed: api.connect),
-          ],
-        ),
-      ),
-      const SizedBox(height: 14),
       ListTile(
         leading: const Icon(Icons.menu_book),
         title: const Text('Regras do Truco'),

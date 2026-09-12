@@ -58,6 +58,20 @@ extension _ProfileScreen on _AuroraAppState {
         stat('Maior sequência', '${me['best']}'),
         stat('Nível', '${me['level']}'),
       ], minWidth: 100),
+      heading('Títulos de torneios'),
+      if ((me['trophies'] as List? ?? []).isEmpty)
+        const Text(
+          'Suas conquistas em torneios ficarão salvas aqui.',
+          style: TextStyle(color: Colors.white60),
+        ),
+      for (final t in me['trophies'] as List? ?? [])
+        ListTile(
+          leading: const Icon(Icons.emoji_events, color: gold),
+          title: Text(t['name']),
+          subtitle: Text('${t['mode']} • ${tournamentDate(t['date'])}'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => showChampion(Map<String, dynamic>.from(t)),
+        ),
       heading('Personalização'),
       grid([
         for (final item in [

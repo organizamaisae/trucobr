@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'bar_table.dart';
+
 const gold = Color(0xFFFFC332);
 const green = Color(0xFF00984F);
 const ink = Color(0xFF00140F);
@@ -113,7 +115,15 @@ class PlayerAvatar extends StatelessWidget {
         ],
       ),
       border: Border.all(
-        color: active || frame == 'frame-1' ? green : gold,
+        color: active
+            ? green
+            : switch (frame) {
+                'frame-1' => green,
+                'frame-2' => const Color(0xFFD38A54),
+                'frame-3' => Colors.lightBlueAccent,
+                'frame-4' => Colors.pinkAccent,
+                _ => gold,
+              },
         width: frame == null ? 2 : 4,
       ),
       boxShadow: active
@@ -121,7 +131,19 @@ class PlayerAvatar extends StatelessWidget {
           : [],
     ),
     alignment: Alignment.center,
-    child: cosmetic != null
+    child:
+        cosmetic != null && (int.tryParse(cosmetic!.split('-').last) ?? 0) >= 3
+        ? Padding(
+            padding: const EdgeInsets.all(3),
+            child: CharacterPortrait(
+              index: ((int.tryParse(cosmetic!.split('-').last) ?? 3) - 3).clamp(
+                0,
+                5,
+              ),
+              size: size - 10,
+            ),
+          )
+        : cosmetic != null
         ? Icon(
             cosmetic == 'avatar-0'
                 ? Icons.explore
@@ -187,9 +209,13 @@ class TrucoCard extends StatelessWidget {
           padding: EdgeInsets.all(width * .09),
           decoration: BoxDecoration(
             color: hidden
-                ? (back == 'back-1'
-                      ? const Color(0xFF762837)
-                      : const Color(0xFF124358))
+                ? switch (back) {
+                    'back-1' => const Color(0xFF762837),
+                    'back-2' => const Color(0xFF087A40),
+                    'back-3' => const Color(0xFF2465AE),
+                    'back-4' => const Color(0xFF705223),
+                    _ => const Color(0xFF124358),
+                  }
                 : const Color(0xFFFFFAEC),
             borderRadius: BorderRadius.circular(7),
             border: Border.all(color: hidden ? gold : Colors.white, width: 1.5),

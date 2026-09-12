@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import '../services/truco_service.dart';
 import '../widgets/truco_widgets.dart';
 import '../widgets/br_art.dart';
+import '../widgets/tournament_trophy.dart';
+import '../widgets/bar_table.dart';
 part '../screens/home/home_screen.dart';
 part '../screens/profile/profile_screen.dart';
 part '../screens/private_room/private_room_screen.dart';
@@ -14,6 +16,7 @@ part '../screens/game_modes/game_modes_screen.dart';
 part '../screens/room_lobby/room_lobby_screen.dart';
 part '../screens/match/match_screen.dart';
 part '../screens/community_screens.dart';
+part '../screens/tournaments_screen.dart';
 
 class AuroraApp extends StatefulWidget {
   final TrucoService? service;
@@ -30,6 +33,16 @@ class _AuroraAppState extends State<AuroraApp> {
   String rule = 'paulista', shopTab = 'avatar';
   int capacity = 2;
   int privateTab = 0;
+  int tournamentTab = 0;
+  final Set<String> seenTrophies = {};
+  final Set<String> seenFinals = {};
+  final Set<String> knownTournaments = {};
+  final List<Map<String, dynamic>> tournamentNotices = [];
+  bool turnFlash = false;
+  bool tournamentBaseline = false;
+  String lastTurn = '';
+  Timer? turnTimer;
+  final Set<String> hiddenInvites = {};
   bool busy = false, restoring = true, showPassword = false;
   void refreshUI(VoidCallback callback) {
     if (mounted) setState(callback);
@@ -56,6 +69,14 @@ class _AuroraAppState extends State<AuroraApp> {
   void initState() {
     super.initState();
     api = widget.service ?? TrucoService();
+    tournamentBaseline = api.token != null;
+    for (final t in me['trophies'] as List? ?? []) {
+      seenTrophies.add(t['id'].toString());
+    }
+    for (final t in api.data['tournaments'] as List? ?? []) {
+      knownTournaments.add(t['id'].toString());
+      if (t['status'] == 'finished') seenFinals.add(t['id'].toString());
+    }
     api.addListener(changed);
     if (api.token != null) {
       restoring = false;
@@ -78,28 +99,78 @@ class _AuroraAppState extends State<AuroraApp> {
     if (!mounted) return;
     final incoming = api.data['room'];
     setState(() {
+      for (final t in api.data['tournaments'] as List? ?? []) {
+        if (knownTournaments.add(t['id'].toString()) &&
+            t['status'] == 'waiting' &&
+            !restoring &&
+            tournamentBaseline) {
+          tournamentNotices.add(Map<String, dynamic>.from(t));
+        }
+      }
+      tournamentBaseline = true;
+      if (screen == 'tournaments' && api.data['tournaments'] is List) {
+        extra = {
+          'tournaments': api.data['tournaments'],
+          'names': api.data['tournament_names'] ?? {},
+        };
+      }
       if (incoming is Map) {
         final started =
             room['status'] != 'playing' || room['code'] != incoming['code'];
         room = Map<String, dynamic>.from(incoming);
+        if (room['status'] == 'closed' && screen == 'match') {
+          screen = 'home';
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => message(room['close_reason'] ?? 'Sala encerrada.'),
+          );
+        }
+        final g = room['game'] as Map?;
+        final isTurn =
+            room['status'] == 'playing' &&
+            g != null &&
+            g['turn'] == g['seat'] &&
+            g['pending'] == null &&
+            g['hand_done'] != true &&
+            g['winner'] == null;
+        final key = isTurn
+            ? '${room['code']}-${g['hand_no']}-${(g['tricks'] as List? ?? []).length}-${g['turn']}'
+            : '';
+        if (isTurn && lastTurn != key) {
+          turnFlash = true;
+          turnTimer?.cancel();
+          turnTimer = Timer(
+            const Duration(milliseconds: 1400),
+            () => refreshUI(() => turnFlash = false),
+          );
+        }
+        lastTurn = key;
         if (room['status'] == 'playing' && started && screen != 'match') {
           screen = 'match';
           orient(true);
         }
       }
     });
+    for (final trophy in me['trophies'] as List? ?? []) {
+      if (seenTrophies.add(trophy['id'].toString())) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) showChampion(Map<String, dynamic>.from(trophy));
+        });
+      }
+    }
+    for (final t in api.data['tournaments'] as List? ?? []) {
+      if (t['status'] == 'finished' &&
+          (t['players'] as List).contains(uid) &&
+          seenFinals.add(t['id'].toString()) &&
+          !(t['champions'] as List? ?? []).contains(uid)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) showBracket(Map<String, dynamic>.from(t));
+        });
+      }
+    }
   }
 
   void orient(bool match) {
-    SystemChrome.setPreferredOrientations(
-      match
-          ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
-          : [
-              DeviceOrientation.portraitUp,
-              DeviceOrientation.landscapeLeft,
-              DeviceOrientation.landscapeRight,
-            ],
-    );
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   }
 
   void message(Object e) {
@@ -169,6 +240,7 @@ class _AuroraAppState extends State<AuroraApp> {
 
   @override
   void dispose() {
+    turnTimer?.cancel();
     api.removeListener(changed);
     if (widget.service == null) api.dispose();
     for (final c in [
@@ -194,6 +266,139 @@ class _AuroraAppState extends State<AuroraApp> {
     debugShowCheckedModeBanner: false,
     scaffoldMessengerKey: messenger,
     navigatorKey: navigator,
+    builder: (context, child) {
+      final invites = (api.data['invites'] as List? ?? []).where(
+        (i) => !hiddenInvites.contains(i['id']),
+      );
+      return Stack(
+        children: [
+          child!,
+          if (api.token != null &&
+              invites.isEmpty &&
+              tournamentNotices.isNotEmpty)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 8,
+              left: 12,
+              right: 12,
+              child: Material(
+                color: panelColor,
+                elevation: 16,
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.emoji_events, color: gold, size: 40),
+                      const Text(
+                        'TORNEIO CRIADO!',
+                        style: TextStyle(
+                          fontSize: 22,
+                          color: gold,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        tournamentNotices.first['name'],
+                        textAlign: TextAlign.center,
+                      ),
+                      Text(
+                        tournamentDate(tournamentNotices.first['starts_at']),
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () =>
+                                setState(() => tournamentNotices.removeAt(0)),
+                            child: const Text('Depois'),
+                          ),
+                          GameButton(
+                            'VER TORNEIO',
+                            onPressed: () {
+                              setState(() {
+                                tournamentNotices.removeAt(0);
+                                tournamentTab = 1;
+                              });
+                              navigator.currentState?.popUntil(
+                                (r) => r.isFirst,
+                              );
+                              go('tournaments');
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          if (api.token != null && invites.isNotEmpty)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 8,
+              left: 12,
+              right: 12,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: Material(
+                    elevation: 16,
+                    color: panelColor,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.mark_email_unread, color: gold),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  '${invites.first['sender']} convidou você para a sala ${invites.first['code']}.',
+                                ),
+                              ),
+                              Semantics(
+                                label: 'Ver depois',
+                                child: IconButton(
+                                  onPressed: () => setState(
+                                    () =>
+                                        hiddenInvites.add(invites.first['id']),
+                                  ),
+                                  icon: const Icon(Icons.close),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: busy
+                                    ? null
+                                    : () => respondInvite(invites.first, false),
+                                child: const Text('Recusar'),
+                              ),
+                              GameButton(
+                                'ENTRAR',
+                                onPressed: busy
+                                    ? null
+                                    : () => respondInvite(invites.first, true),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    },
     theme: ThemeData(
       fontFamily: 'Inter',
       brightness: Brightness.dark,
@@ -207,6 +412,10 @@ class _AuroraAppState extends State<AuroraApp> {
         surface: panelColor,
       ),
       appBarTheme: const AppBarTheme(backgroundColor: ink, centerTitle: true),
+      navigationBarTheme: const NavigationBarThemeData(
+        labelTextStyle: WidgetStatePropertyAll(TextStyle(fontSize: 10)),
+        indicatorColor: Color(0xFF695019),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: const Color(0xFF091D26),
@@ -246,7 +455,7 @@ class _AuroraAppState extends State<AuroraApp> {
             }
           },
           child: Scaffold(
-            appBar: match
+            appBar: match || screen == 'tournaments'
                 ? null
                 : AppBar(
                     leading: screen == 'home'
@@ -290,17 +499,6 @@ class _AuroraAppState extends State<AuroraApp> {
               child: Column(
                 children: [
                   if (busy) const LinearProgressIndicator(minHeight: 2),
-                  if (!api.connected)
-                    Container(
-                      width: double.infinity,
-                      color: const Color(0xFF493F20),
-                      padding: const EdgeInsets.all(5),
-                      child: const Text(
-                        'Reconectando ao servidor…',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 11),
-                      ),
-                    ),
                   Expanded(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
@@ -353,11 +551,22 @@ class _AuroraAppState extends State<AuroraApp> {
                       'home',
                       'modes',
                       'friends',
+                      'tournaments',
+                      'ranking',
                       'shop',
                       'profile',
-                    ].indexOf(screen).clamp(0, 4),
-                    onDestinationSelected: (i) =>
-                        go(['home', 'modes', 'friends', 'shop', 'profile'][i]),
+                    ].indexOf(screen).clamp(0, 6),
+                    onDestinationSelected: (i) => go(
+                      [
+                        'home',
+                        'modes',
+                        'friends',
+                        'tournaments',
+                        'ranking',
+                        'shop',
+                        'profile',
+                      ][i],
+                    ),
                     destinations: const [
                       NavigationDestination(
                         icon: Icon(Icons.home_outlined),
@@ -370,6 +579,14 @@ class _AuroraAppState extends State<AuroraApp> {
                       NavigationDestination(
                         icon: Icon(Icons.people_outline),
                         label: 'Amigos',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.emoji_events_outlined),
+                        label: 'Torneios',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.bar_chart),
+                        label: 'Ranking',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.shopping_cart_outlined),

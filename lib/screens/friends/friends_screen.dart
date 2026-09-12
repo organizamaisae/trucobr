@@ -61,10 +61,7 @@ extension _FriendsScreen on _AuroraAppState {
           title: Text(i['sender']),
           subtitle: Text('Sala ${i['code']}'),
           trailing: TextButton(
-            onPressed: () => enterRoom('join', {
-              'code': i['code'],
-              'password': roomPassword.text,
-            }),
+            onPressed: () => respondInvite(i, true),
             child: const Text('Entrar'),
           ),
         ),

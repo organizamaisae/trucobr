@@ -14,7 +14,7 @@ def test_tournaments_require_server_permission(client):
     assert response.status_code==200
     assert response.json()['can_create_tournaments']
     admin={'Authorization':'Bearer '+response.json()['token']}
-    assert client.post('/api/tournaments/create',headers=admin,json=dict(name='Valid',size=12)).status_code==400
+    assert client.post('/api/tournaments/create',headers=admin,json=dict(name='Valid',size=257)).status_code==400
     created=post(client,admin,'tournaments/create',name='Sábado do Truco',size=16)
     assert len(created['tournaments'])==1
     assert created['tournaments'][0]['players']==[]

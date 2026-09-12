@@ -36,6 +36,25 @@ CATALOG = [dict(id=f'{kind}-{i}', kind=kind, name=name, price=price, icon=icon)
                ('effect', ['Brilho'], 800, 'star'),
                ('pass', ['Temporada Aurora'], 3000, 'crown')]
            for i, name in enumerate(names)]
+CATALOG += [dict(id=f'avatar-{i+3}', kind='avatar', name=name, price=750+i*150, icon='person')
+            for i,name in enumerate(['Rafa do Bar','Juliana','Seu Chico','Bia','Carlos','Marina'])]
+CATALOG += [dict(id=f'{kind}-{i+2}',kind=kind,name=name,price=price+i*200,icon=kind)
+            for kind,names,price in [('table',['Boteco Clássico','Bar da Praia','Madeira Imperial'],1200),
+              ('frame',['Cobre','Azul Neon','Rosa Neon'],800),('back',['Brasil','Azulejo','Imperial'],800),
+              ('effect',['Aura Dourada','Faíscas Verdes'],1000)] for i,name in enumerate(names)]
+TABLES = ['table-0','table-1','table-2','table-3','table-4']
+
+
+def tournament_view(t, uid):
+    result = {k:v for k,v in t.items() if k!='teams'}
+    if 'teams' in t:
+        result['teams'] = [dict(members=x['members']) for x in t['teams']]
+        result['team_code'] = next((x['code'] for x in t['teams'] if uid in x['members']),None)
+    return result
+
+
+def in_live_tournament(db, uid):
+    return any(t['status']=='playing' and uid in t['players'] and uid not in t.get('unpaired',[]) for t in all_of(db,'tournament'))
 
 
 def fail(message, status=400):
@@ -50,7 +69,8 @@ def public(u):
     wins, losses = u['wins'], u['losses']
     return {**{k: u[k] for k in ['id', 'name', 'xp', 'wins', 'losses', 'streak', 'best', 'equipped']},
             'level': 1+u['xp']//1000, 'games': wins+losses,
-            'win_rate': round(wins*100/max(1, wins+losses)), 'online': u['id'] in peers}
+            'win_rate': round(wins*100/max(1, wins+losses)), 'online': u['id'] in peers,
+            'trophies': u.get('trophies', [])}
 
 
 def user(db, token):
@@ -97,7 +117,8 @@ def create_room(db, u, data, quick=False, tournament=None):
     r = dict(code=code, name=str(data.get('name', 'Mesa de '+u['name']))[:40], host=u['id'],
              capacity=capacity, fee=fee, rule=rule, players=[u['id']], status='waiting', game=None,
              password=password_hash(str(data['password'])) if data.get('password') else None,
-             quick=quick, settled=False, tournament=tournament, updated=time.time())
+             quick=quick, settled=False, tournament=tournament, updated=time.time(),
+             table=u['equipped'].get('table','table-2'), table_text='TRUCO BR')
     put(db, 'room:'+code, 'room', r)
     return r
 
@@ -133,29 +154,114 @@ def settle(db, r):
         t = get(db, 'tournament:'+r['tournament'])
         for match in t['rounds'][-1]:
             if match['room'] == r['code']:
-                match['winner'] = r['players'][g['winner']]
+                team = r['players'][g['winner']::2]
+                match['winner'] = team if t.get('mode') == '2v2' else team[0]
         if all(m['winner'] for m in t['rounds'][-1]):
             winners = [m['winner'] for m in t['rounds'][-1]]
             if len(winners) == 1:
-                t.update(status='finished', winner=winners[0])
-                u = get(db, 'user:'+winners[0])
-                ledger(u, t['size']*250, 'Campeão do torneio')
-                u['xp'] += 1000
-                save_user(db, u)
+                finish_tournament(db, t, winners[0])
             else:
                 tournament_round(db, t, winners)
         put(db, 'tournament:'+t['id'], 'tournament', t)
 
 
 def tournament_round(db, t, entrants):
+    """Pad the opening round to a power of two; byes never invent players."""
     matches = []
+    entrants = list(entrants)
+    target = 1 << (len(entrants)-1).bit_length()
+    byes = target-len(entrants)
+    for entrant in entrants[:byes]:
+        matches.append(dict(room=None, players=team_members(entrant), winner=entrant, bye=True))
+    entrants = entrants[byes:]
     for i in range(0, len(entrants), 2):
-        r = create_room(db, get(db, 'user:'+entrants[i]), dict(capacity=2, fee=0), tournament=t['id'])
-        r['players'] = entrants[i:i+2]
+        a, b = map(team_members, entrants[i:i+2])
+        players = [p for pair in zip(a, b) for p in pair]
+        r = create_room(db, get(db, 'user:'+players[0]), dict(capacity=len(players), fee=0, rule=t.get('rule','paulista')), tournament=t['id'])
+        r['players'] = players
+        r['table'] = t.get('table','table-2')
+        r['table_text'] = t.get('table_text','TRUCO BR')
         start_room(db, r)
-        matches.append(dict(room=r['code'], players=r['players'], winner=None))
+        matches.append(dict(room=r['code'], players=players, teams=[a,b], winner=None))
     t['rounds'].append(matches)
     t['status'] = 'playing'
+
+
+def team_members(entrant):
+    return entrant if isinstance(entrant, list) else [entrant]
+
+
+def finish_tournament(db, t, winner):
+    if t['status'] == 'finished':
+        return
+    champions = team_members(winner)
+    date = now().isoformat()
+    t.update(status='finished', winner=winner, champions=champions, finished_at=date)
+    prize = t.get('prize', t['size']*250)
+    for uid in champions:
+        u = get(db, 'user:'+uid)
+        ledger(u, prize//len(champions), 'Campeão: '+t['name'])
+        u['xp'] += 1000
+        u.setdefault('trophies', []).append(dict(id=t['id'], name=t['name'], mode=t.get('mode','1v1'),
+            date=date, chips=prize//len(champions), xp=1000, champions=champions))
+        save_user(db, u)
+
+
+def begin_tournament(db, t):
+    players = list(t['players'])
+    team_size = 2 if t.get('mode') == '2v2' else 1
+    if team_size==2 and 'teams' in t:
+        entrants=[x['members'][:] for x in t['teams'] if len(x['members'])==2]
+        complete=[p for pair in entrants for p in pair]
+        t['unpaired']=[p for p in players if p not in complete]
+        players=complete
+        if len(players) < 4:
+            t.update(status='cancelled', reason='Duplas completas insuficientes no horário de início.')
+            put(db,'tournament:'+t['id'],'tournament',t)
+            return
+    if len(players) < team_size*2:
+        t.update(status='cancelled', reason='Inscritos insuficientes no horário de início.')
+    else:
+        # Pairs are formed in registration order and remain together throughout.
+        if 'teams' not in t or team_size==1:
+            t['unpaired'] = players[-1:] if team_size == 2 and len(players)%2 else []
+            if t['unpaired']:
+                players = players[:-1]
+            entrants = [players[i:i+2] for i in range(0,len(players),2)] if team_size == 2 else players
+        # End casual rooms atomically before seating their players in the event.
+        for r in all_of(db,'room'):
+            if not r.get('tournament') and r['status'] in ['waiting','playing'] and set(players).intersection(r['players']):
+                if r['status']=='playing':
+                    for p in r['players']:
+                        account=get(db,'user:'+p)
+                        ledger(account,r['fee'],'Entrada devolvida: início de torneio')
+                        save_user(db,account)
+                r.update(status='closed',settled=True,close_reason='Sala encerrada para início de torneio. Entradas devolvidas.')
+                put(db,'room:'+r['code'],'room',r)
+        secrets.SystemRandom().shuffle(entrants)
+        t.update(actual_players=len(players), prize=t.get('custom_prize',len(players)*250), started_at=now().isoformat())
+        tournament_round(db,t,entrants)
+    put(db,'tournament:'+t['id'],'tournament',t)
+
+
+def start_due_tournaments(db, timestamp=None):
+    timestamp = time.time() if timestamp is None else timestamp
+    changed = False
+    for t in all_of(db,'tournament'):
+        if t['status']=='waiting' and t.get('starts_at') and datetime.fromisoformat(t['starts_at']).timestamp() <= timestamp:
+            begin_tournament(db,t)
+            changed = True
+    return changed
+
+
+def pending_invites(db, uid):
+    result = []
+    for i in all_of(db,'invite'):
+        if i['to']==uid and i['expires']>time.time():
+            r = get(db,'room:'+i['code'])
+            if r and r['status']=='waiting' and len(r['players'])<r['capacity'] and uid not in r['players']:
+                result.append(i)
+    return result
 
 
 def dashboard(db, u):
@@ -169,11 +275,14 @@ def dashboard(db, u):
         m['claimed'] = m['id'] in u['claims']
     r = active_room(db, u['id'])
     if not r:
-        r = next((x for x in reversed(all_of(db, 'room')) if u['id'] in x['players'] and x['status']=='finished'), None)
+        r = next((x for x in reversed(all_of(db, 'room')) if u['id'] in x['players'] and x['status'] in ['finished','closed']), None)
     return dict(profile=public(u), can_create_tournaments=can_create(u), admin_eligible=(u.get('email') or '').lower()==ADMIN_EMAIL, chips=u['chips'], earned=u['earned'], spent=u['spent'],
                 ledger=list(reversed(u['ledger'][-100:])), history=list(reversed(u['history'][-100:])),
                 daily_available=u['daily'] != d, inventory=u['inventory'], missions=missions,
                 achievements=[dict(name=n, unlocked=u[k] >= v) for n, k, v in [('Primeira vitória', 'wins', 1), ('Dez vitórias', 'wins', 10), ('Invencível: 5 seguidas', 'best', 5), ('Nível 5', 'xp', 4000)]],
+                invites=pending_invites(db,u['id']),
+                tournaments=[tournament_view(t,u['id']) for t in all_of(db,'tournament') if t.get('created_by') or t['status']!='waiting' or t['players']],
+                tournament_names={p['id']:p['name'] for p in all_of(db,'user')},
                 room=room_view(db, r, u['id']) if r else None)
 
 
@@ -183,6 +292,11 @@ async def maintenance():
         changed = False
         async with lock:
             with Session.begin() as db:
+                changed = start_due_tournaments(db)
+                for invitation in all_of(db,'invite'):
+                    if invitation['expires']<=time.time():
+                        delete(db,'invite:'+invitation['id'])
+                        changed=True
                 for r in all_of(db,'room'):
                     if r['status']=='playing' and time.time()-r['updated']>180:
                         g=r['game']
@@ -410,16 +524,28 @@ def dispatch(db, u, path, b, method):
         return dict(friends=[public(get(db, 'user:'+(e['b'] if e['a']==uid else e['a']))) for e in edges if e['status']=='accepted'],
                     requests=[public(get(db, 'user:'+e['a'])) for e in edges if e['status']=='pending' and e['b']==uid],
                     results=[public(p) for p in all_of(db, 'user') if query and (query in p['name'].lower() or query == p['id']) and p['id'] != uid][:20],
-                    invites=[i for i in all_of(db, 'invite') if i['to']==uid and i['expires']>time.time()])
+                    invites=pending_invites(db,uid))
     if path == 'invite':
         r = get(db, 'room:'+str(b.get('code', '')))
-        if not r or uid not in r['players'] or b.get('id') not in friend_ids(db, uid):
+        if not r or r['status']!='waiting' or len(r['players'])>=r['capacity'] or uid not in r['players'] or b.get('id') not in friend_ids(db, uid):
             fail('Escolha um amigo e uma sala sua.')
         i = dict(id=secrets.token_hex(8), to=b['id'], code=r['code'], sender=u['name'], expires=time.time()+300)
         put(db, 'invite:'+i['id'], 'invite', i)
         return dict(ok=True)
+    if path == 'invite/respond':
+        i = get(db,'invite:'+str(b.get('id','')))
+        if not i or i['to']!=uid or i['expires']<=time.time():
+            fail('Convite expirado ou indisponível.',404)
+        if b.get('action')=='decline':
+            delete(db,'invite:'+i['id'])
+            return dict(ok=True)
+        if b.get('action')!='accept':
+            fail('Resposta inválida.')
+        result = dispatch(db,u,'rooms/join',dict(code=i['code'],invite_id=i['id']),'POST')
+        delete(db,'invite:'+i['id'])
+        return result
     if path == 'rooms/create' or path == 'rooms/quick':
-        if any(uid in t['players'] and t['status'] in ['waiting','playing'] for t in all_of(db,'tournament')):
+        if in_live_tournament(db,uid):
             fail('Você está inscrito em um torneio. Acompanhe a chave.')
         if u['chips'] < b.get('fee',100):
             fail('Saldo insuficiente.')
@@ -443,13 +569,15 @@ def dispatch(db, u, path, b, method):
         if action not in ['join','start','leave','action','state','emote']:
             fail('Rota não encontrada.',404)
         if action == 'join' and uid not in r['players']:
-            if any(uid in t['players'] and t['status'] in ['waiting','playing'] for t in all_of(db,'tournament')):
+            if in_live_tournament(db,uid):
                 fail('Cancele sua inscrição ou conclua seu torneio primeiro.')
             if active_room(db, uid):
                 fail('Saia da sua sala atual primeiro.')
             if r['status'] != 'waiting' or len(r['players']) >= r['capacity']:
                 fail('Sala cheia ou partida em andamento.')
-            if r['password'] and not verify(str(b.get('password',''))[:128], r['password']):
+            invitation=get(db,'invite:'+str(b.get('invite_id','')))
+            invited=invitation and invitation['to']==uid and invitation['code']==r['code'] and invitation['expires']>time.time()
+            if r['password'] and not invited and not verify(str(b.get('password',''))[:128], r['password']):
                 fail('Senha da sala incorreta.')
             if u['chips'] < r['fee']:
                 fail('Saldo insuficiente.')
@@ -496,31 +624,66 @@ def dispatch(db, u, path, b, method):
             fail('Somente o administrador pode criar torneios.',403)
         size=b.get('size',8)
         name=str(b.get('name','')).strip()
-        if type(size) is not int or size not in [8,16,32] or not 3<=len(name)<=50:
-            fail('Informe nome de 3 a 50 caracteres e 8, 16 ou 32 jogadores.')
+        mode=b.get('mode','1v1')
+        rule=b.get('rule','paulista')
+        if type(size) is not int or not 2<=size<=256 or mode not in ['1v1','2v2'] or rule not in ['paulista','fixa'] or not 3<=len(name)<=50 or (mode=='2v2' and (size<4 or size%2)):
+            fail('Informe nome, modo e 2 a 256 vagas. Duplas exigem pelo menos 4 vagas e um número par.')
+        starts_at=None
+        if b.get('starts_at'):
+            try:
+                start=datetime.fromisoformat(b['starts_at'].replace('Z','+00:00'))
+                if start.tzinfo is None or start.timestamp()<=time.time():
+                    raise ValueError()
+                starts_at=start.astimezone(timezone.utc).isoformat()
+            except (ValueError,TypeError,AttributeError):
+                fail('Escolha data e horário futuros com fuso horário.')
         tid=secrets.token_hex(5)
-        put(db,'tournament:'+tid,'tournament',dict(id=tid,name=name,size=size,players=[],rounds=[],status='waiting',winner=None,created_by=uid,created_at=now().isoformat()))
-        return dispatch(db,u,'tournaments',{},'GET')
+        table=b.get('table','table-2')
+        table_text=str(b.get('table_text','TRUCO BR')).strip()
+        prize=b.get('prize',size*250)
+        if table not in TABLES or len(table_text)>40 or type(prize) is not int or not 0<=prize<=1000000 or (mode=='2v2' and prize%2):
+            fail('Confira a mesa, frase de até 40 caracteres e premiação de 0 a 1.000.000 (par em duplas).')
+        t=dict(id=tid,name=name,size=size,mode=mode,rule=rule,starts_at=starts_at,table=table,table_text=table_text,custom_prize=prize,players=[],rounds=[],status='waiting',winner=None,created_by=uid,created_at=now().isoformat())
+        if mode=='2v2': t['teams']=[]
+        put(db,'tournament:'+tid,'tournament',t)
+        return dict(**dispatch(db,u,'tournaments',{},'GET'), created=tournament_view(t,uid))
     if path == 'tournaments':
+        start_due_tournaments(db)
         if method == 'POST':
             tid = str(b.get('id', ''))
             t = get(db, 'tournament:'+tid)
             if not t:
                 fail('Torneio não encontrado.')
-            if active_room(db,uid) or any(uid in x['players'] and x['status'] in ['waiting','playing'] and x['id'] != tid for x in all_of(db,'tournament')):
+            if any(uid in x['players'] and x['status'] in ['waiting','playing'] and x['id'] != tid for x in all_of(db,'tournament')):
                 fail('Conclua sua sala ou torneio atual.')
             if t['status'] != 'waiting':
                 fail('Inscrições encerradas.')
             if b.get('action')=='leave' and uid in t['players']:
                 t['players'].remove(uid)
-            elif uid not in t['players']:
+                for pair in t.get('teams',[]):
+                    if uid in pair['members']: pair['members'].remove(uid)
+                t['teams']=[x for x in t.get('teams',[]) if x['members']] if 'teams' in t else t.get('teams',[])
+            elif b.get('action','join')=='join' and uid not in t['players'] and len(t['players'])<t['size']:
+                if t.get('mode')=='2v2' and 'teams' in t:
+                    if b.get('team_action')=='create':
+                        if len(t['teams'])>=t['size']//2:
+                            fail('Entre no código de uma dupla existente; todas as duplas já foram criadas.')
+                        code=secrets.token_hex(4).upper()
+                        while any(x['code']==code for x in t['teams']): code=secrets.token_hex(4).upper()
+                        t['teams'].append(dict(code=code,members=[uid]))
+                    elif b.get('team_action')=='join':
+                        pair=next((x for x in t['teams'] if x['code']==str(b.get('team_code','')).strip().upper()),None)
+                        if not pair or len(pair['members'])!=1: fail('Código inválido ou dupla completa.')
+                        pair['members'].append(uid)
+                    else: fail('Escolha Criar Código ou Entrar em Código.')
                 t['players'].append(uid)
-            if len(t['players']) == t['size']:
-                secrets.SystemRandom().shuffle(t['players'])
-                tournament_round(db,t,t['players'])
+            else:
+                fail('Inscrição inválida ou vagas esgotadas.')
+            if len(t['players']) == t['size'] and not t.get('starts_at'):
+                begin_tournament(db,t)
             put(db, 'tournament:'+tid,'tournament',t)
         ts = [t for t in all_of(db,'tournament') if t.get('created_by') or t['status']!='waiting' or t['players']]
-        return dict(tournaments=ts[-30:], names={p['id']:p['name'] for p in all_of(db,'user')})
+        return dict(tournaments=[tournament_view(t,uid) for t in ts[-30:]], names={p['id']:p['name'] for p in all_of(db,'user')})
     fail('Rota não encontrada.',404)
 
 

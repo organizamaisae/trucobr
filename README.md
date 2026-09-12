@@ -1,12 +1,13 @@
-# Truco BR — versão 3
+# Truco BR — versão 3.1
 
 Mesmo aplicativo Flutter e mesmo backend Python/multiplayer, agora com o visual brasileiro da referência e MongoDB. O endereço do servidor continua `https://aurora-z5xt.onrender.com`. Login por e-mail/senha ou convidado, sem Google. Não há bots nem operações com dinheiro real.
 
 ## O que mudou
 
-- Nome exibido **Truco BR**, versão `3.0.0+3`; identificador Android preservado para atualizar o aplicativo existente.
+- Nome exibido **Truco BR**, versão `3.1.0+4`; identificador Android preservado para atualizar o aplicativo existente.
 - Interface verde escura, madeira, dourado, banner e avatar originais, JOGAR amarelo, salas privadas com abas, fichas desenhadas em código.
-- **Nenhum torneio é criado automaticamente.** A lista começa vazia. Eventos são publicados pelo administrador no aplicativo; continuam começando quando completam 8, 16 ou 32 jogadores reais.
+- **Nenhum torneio é criado automaticamente.** O administrador escolhe nome, modo 1v1/2v2, data/horário e 2 a 256 vagas. O servidor inicia no horário e adapta a chave aos inscritos reais, com folgas quando necessário. Veja [regras e validação](docs/torneios-3.1.md).
+- Convites aparecem sobre qualquer tela ou diálogo do aplicativo aberto, com aceitar e recusar. Campeões recebem uma tela de vitória e um título permanente no perfil.
 - Somente a conta `gustavoluzmachado@gmail.com`, ativada com código privado, pode criar torneios. A API valida essa permissão em cada criação, independentemente da interface.
 - Persistência MongoDB com transações para salas, usuários, fichas, sessões, loja, amigos e torneios.
 
@@ -87,7 +88,7 @@ O código de ativação impede que alguém ganhe acesso administrativo simplesme
 3. Preencha com o valor de `ADMIN_SETUP_CODE` e escolha sua senha de login.
 4. Se essa conta já existir no banco, faça login e abra **Configurações → Ativar administrador**, usando o mesmo código.
 5. Vá a **Torneios → CRIAR TORNEIO**.
-6. Informe o nome e escolha 8, 16 ou 32 jogadores; toque em **Publicar**.
+6. Informe nome, modo 1v1 ou 2v2, vagas e data/horário; toque em **PUBLICAR**. O horário mostrado é local e enviado ao servidor em UTC.
 
 As outras contas veem a lista e podem se inscrever, mas não veem o botão de criação. Requisições diretas de contas comuns recebem HTTP 403. Não há torneios de exemplo adicionados pelo servidor. Torneios antigos vazios e sem criador não são exibidos; torneios com participantes não são apagados.
 
@@ -121,7 +122,7 @@ Mantenha **uma instância/um worker**. O estado persiste no MongoDB, mas a coord
 ## Testes
 
 ```powershell
-.\.venv\Scripts\python -m pytest server/test_truco.py server/test_admin.py server/test_mongo_adapter.py -q
+.\.venv\Scripts\python -m pytest server/test_truco.py server/test_admin.py server/test_mongo_adapter.py server/test_scheduled_tournaments.py -q
 flutter analyze
 flutter test
 ```
