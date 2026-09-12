@@ -1,40 +1,58 @@
 @echo off
 setlocal EnableExtensions
-pushd "%~dp0"
-if errorlevel 1 (
-  echo ERRO: nao foi possivel abrir a pasta do projeto.
-  exit /b 1
+set "PROJECT_DRIVE="
+for %%D in (Z Y X W V) do if not exist %%D:\ set "PROJECT_DRIVE=%%D:" & goto :map_project
+:map_project
+if defined PROJECT_DRIVE (
+  subst %PROJECT_DRIVE% "%~dp0"
+  if errorlevel 1 (
+    echo ERRO: nao foi possivel criar uma unidade temporaria para o projeto.
+    exit /b 1
+  )
+  cd /d %PROJECT_DRIVE%\
+) else (
+  pushd "%~dp0"
+  if errorlevel 1 (
+    echo ERRO: nao foi possivel abrir a pasta do projeto.
+    exit /b 1
+  )
 )
 
-where flutter >nul 2>&1
+where flutter.bat >nul 2>&1
 if errorlevel 1 (
   echo ERRO: Flutter nao esta no PATH. Abra o terminal do Flutter ou adicione flutter\bin ao PATH.
-  exit /b 1
+  goto :fail
 )
 
 echo [1/4] Atualizando dependencias...
-flutter pub get
-if errorlevel 1 exit /b 1
+call flutter.bat pub get
+if errorlevel 1 goto :fail
 
 echo [2/4] Executando flutter analyze...
-flutter analyze
-if errorlevel 1 exit /b 1
+call flutter.bat analyze
+if errorlevel 1 goto :fail
 
 echo [3/4] Executando testes Flutter...
-flutter test
-if errorlevel 1 exit /b 1
+call flutter.bat test
+if errorlevel 1 goto :fail
 
 echo [4/4] Gerando APK debug...
-flutter build apk --debug
-if errorlevel 1 exit /b 1
+call flutter.bat build apk --debug
+if errorlevel 1 goto :fail
 
 if not exist "dist" mkdir "dist"
 copy /Y "build\app\outputs\flutter-apk\app-debug.apk" "dist\truco-br-android.apk" >nul
 if errorlevel 1 (
   echo ERRO: APK gerado, mas nao foi possivel copia-lo para dist.
-  exit /b 1
+  goto :fail
 )
 
 echo APK pronto em:
 echo %~dp0dist\truco-br-android.apk
+if defined PROJECT_DRIVE subst %PROJECT_DRIVE% /d
 exit /b 0
+
+:fail
+if defined PROJECT_DRIVE subst %PROJECT_DRIVE% /d
+echo Falha ao gerar o APK.
+exit /b 1
