@@ -179,6 +179,12 @@ void main() {
     expect(find.textContaining('Google'), findsNothing);
     await tester.runAsync(
       () => precacheImage(
+        const AssetImage('assets/images/truco-br-login-logo.png'),
+        tester.element(find.byType(Scaffold)),
+      ),
+    );
+    await tester.runAsync(
+      () => precacheImage(
         const AssetImage('assets/images/truco-br-background.png'),
         tester.element(find.byType(Scaffold)),
       ),

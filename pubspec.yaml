@@ -24,7 +24,7 @@ flutter:
     - assets/images/truco-br-tournaments.png
     - assets/images/truco-br-bar-table.png
     - assets/images/truco-br-characters.png
-    - assets/images/truco-br-logo.png
+    - assets/images/truco-br-login-logo.png
   fonts:
     - family: Inter
       fonts:

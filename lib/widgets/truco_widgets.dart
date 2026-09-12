@@ -344,75 +344,12 @@ class TrucoLogo extends StatelessWidget {
     width: size * 1.6,
     height: size * 1.32,
     child: Image.asset(
-      'assets/images/truco-br-logo.png',
+      'assets/images/truco-br-login-logo.png',
       fit: BoxFit.contain,
       filterQuality: FilterQuality.high,
     ),
   );
-/*
-    child: Column(
-      children: [
-        SizedBox(
-          height: size * .7,
-          child: Stack(
-            alignment: Alignment.bottomCenter,
-            children: [
-              Transform.translate(
-                offset: Offset(-size * .28, 8),
-                child: Transform.rotate(
-                  angle: -.32,
-                  child: TrucoCard('A♠', width: size * .34),
-                ),
-              ),
-              Transform.translate(
-                offset: Offset(size * .28, 8),
-                child: Transform.rotate(
-                  angle: .32,
-                  child: TrucoCard('3♣', width: size * .34),
-                ),
-              ),
-              TrucoCard('A♥', width: size * .34),
-              Icon(Icons.workspace_premium, color: gold, size: size * .45),
-            ],
-          ),
-        ),
-        Expanded(
-          child: FittedBox(
-            child: Text(
-              'TRUCO BR',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: size * .38,
-                height: 1,
-                color: gold,
-                fontWeight: FontWeight.w900,
-                shadows: const [
-                  Shadow(
-                    color: Colors.black,
-                    blurRadius: 8,
-                    offset: Offset(0, 3),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        SizedBox(
-          height: size * .12,
-          child: FittedBox(
-            child: Text(
-              'O JOGO MAIS BRASILEIRO DO BRASIL',
-              style: TextStyle(
-                fontSize: size * .072,
-                color: gold,
-                letterSpacing: 2,
-              ),
-            ),
-          ),
-        ),
-      ],
-    ),
-  );*/
+
 }
 
 class FeltPainter extends CustomPainter {
