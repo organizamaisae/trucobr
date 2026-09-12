@@ -6,24 +6,22 @@ const barTableNames = {
   'table-2': 'Boteco Clássico',
   'table-3': 'Bar da Praia',
   'table-4': 'Madeira Imperial',
+  'table-5': 'Quiosque da Praia',
+  'table-6': 'Taverna da Serra',
+};
+
+String barTableAsset(String table) => switch (table) {
+  'table-3' || 'table-5' => 'assets/images/table-praia.png',
+  'table-4' || 'table-6' => 'assets/images/table-serra.png',
+  _ => 'assets/images/truco-br-bar-table.png',
 };
 
 class BarTable extends StatelessWidget {
   final String table;
   const BarTable({super.key, this.table = 'table-2'});
   @override
-  Widget build(BuildContext context) => ColorFiltered(
-    colorFilter: ColorFilter.mode(switch (table) {
-      'table-1' => const Color(0x55402681),
-      'table-3' => const Color(0x553578AE),
-      'table-4' => const Color(0x556E4016),
-      _ => Colors.transparent,
-    }, BlendMode.srcATop),
-    child: Image.asset(
-      'assets/images/truco-br-bar-table.png',
-      fit: BoxFit.fill,
-    ),
-  );
+  Widget build(BuildContext context) =>
+      Image.asset(barTableAsset(table), fit: BoxFit.cover);
 }
 
 class CharacterPortrait extends StatelessWidget {

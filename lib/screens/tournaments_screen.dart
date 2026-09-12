@@ -222,10 +222,14 @@ extension _Tournaments on _AuroraAppState {
                       labelText: 'Taxa de inscrição (fichas)',
                     ),
                     items: const [0, 100, 500, 1000, 5000, 10000]
-                        .map((value) => DropdownMenuItem(
-                              value: value,
-                              child: Text(value == 0 ? 'Grátis' : '$value fichas'),
-                            ))
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(
+                              value == 0 ? 'Grátis' : '$value fichas',
+                            ),
+                          ),
+                        )
                         .toList(),
                     onChanged: (value) => update(() => entryFee = value ?? 0),
                   ),
@@ -253,7 +257,9 @@ extension _Tournaments on _AuroraAppState {
                     onTap: () async {
                       final date = await showDatePicker(
                         context: context,
-                        initialDate: DateTime.now().add(const Duration(hours: 1)),
+                        initialDate: DateTime.now().add(
+                          const Duration(hours: 1),
+                        ),
                         firstDate: DateTime.now(),
                         lastDate: DateTime.now().add(const Duration(days: 365)),
                       );
@@ -350,7 +356,8 @@ extension _Tournaments on _AuroraAppState {
                     n < 2 ||
                     n > 256 ||
                     (mode == '2v2' && (n < 4 || n.isOdd)) ||
-                    start == null || !start!.isAfter(DateTime.now()) ||
+                    start == null ||
+                    !start!.isAfter(DateTime.now()) ||
                     prize < 0 ||
                     prize > 1000000 ||
                     (mode == '2v2' && prize.isOdd)) {
@@ -439,7 +446,10 @@ extension _Tournaments on _AuroraAppState {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await mutation('tournaments', {'id': t['id'], 'action': 'delete'}, reload: true);
+    await mutation('tournaments', {
+      'id': t['id'],
+      'action': 'delete',
+    }, reload: true);
     if (mounted) message('Torneio excluído.');
   }
 
@@ -790,7 +800,10 @@ extension _Tournaments on _AuroraAppState {
                   IconButton(
                     tooltip: 'Excluir torneio',
                     onPressed: busy ? null : () => deleteTournament(t),
-                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.redAccent,
+                    ),
                   ),
               ],
             ),
@@ -876,84 +889,228 @@ extension _Tournaments on _AuroraAppState {
           (t) => t['id'] == original['id'],
         );
         final t = current.isEmpty ? original : current.first;
-        return AlertDialog(
-          title: Text(t['name']),
-          content: SizedBox(
-            width: 580,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (t['status'] == 'finished') ...[
-                    const Icon(Icons.emoji_events, color: gold, size: 80),
-                    Text(
-                      'CAMPEÃO: ${entrantName(t['winner'])}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: gold,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
+        final rounds = t['rounds'] as List;
+        final total = rounds.isEmpty
+            ? 0
+            : rounds.first.length == 1
+            ? 1
+            : (rounds.first.length as int).bitLength;
+        final height = rounds.isEmpty
+            ? 240.0
+            : (rounds.first.length * 124.0).clamp(240.0, 20000.0);
+        return Dialog.fullscreen(
+          child: SafeArea(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  title: Text(
+                    t['name'],
+                    style: const TextStyle(
+                      color: gold,
+                      fontWeight: FontWeight.w900,
                     ),
-                    const SizedBox(height: 16),
-                  ],
-                  if (t['status'] == 'cancelled')
-                    Text(t['reason'] ?? 'Torneio cancelado'),
-                  for (
-                    int round = 0;
-                    round < (t['rounds'] as List).length;
-                    round++
-                  ) ...[
-                    Text(
-                      'RODADA ${round + 1}',
-                      style: const TextStyle(color: gold),
+                  ),
+                  subtitle: Text(
+                    '${t['mode']} • ${tournamentDate(t['starts_at'])}',
+                  ),
+                  trailing: const Icon(Icons.emoji_events, color: gold),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    t['status'] == 'finished'
+                        ? 'CAMPEÃO: ${entrantName(t['winner'])}'
+                        : t['status'] == 'cancelled'
+                        ? t['reason'] ?? 'Cancelado'
+                        : 'CHAVEAMENTO • arraste para acompanhar',
+                    style: const TextStyle(
+                      color: gold,
+                      fontWeight: FontWeight.bold,
                     ),
-                    for (final m in t['rounds'][round])
-                      Card(
-                        child: ListTile(
-                          title: Text(
-                            m['teams'] == null
-                                ? entrantName(m['players'])
-                                : (m['teams'] as List)
-                                      .map(entrantName)
-                                      .join(' × '),
-                          ),
-                          subtitle: Text(
-                            m['bye'] == true
-                                ? 'Avança automaticamente • folga'
-                                : m['winner'] == null
-                                ? 'Em disputa'
-                                : 'Vencedor: ${entrantName(m['winner'])}',
-                          ),
-                          trailing:
-                              m['winner'] == null &&
-                                  (m['players'] as List).contains(uid)
-                              ? IconButton(
-                                  icon: const Icon(
-                                    Icons.play_arrow,
-                                    color: gold,
+                  ),
+                ),
+                if (rounds.isEmpty)
+                  const Expanded(
+                    child: Center(
+                      child: Text('A chave será formada no início do torneio.'),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          height: height + 40,
+                          child: CustomPaint(
+                            painter: BracketLines(rounds.first.length, total),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                for (int r = 0; r < total; r++)
+                                  SizedBox(
+                                    width: 252,
+                                    child: Column(
+                                      children: [
+                                        SizedBox(
+                                          height: 40,
+                                          child: Center(
+                                            child: Text(
+                                              r == total - 1
+                                                  ? 'FINAL'
+                                                  : r == total - 2
+                                                  ? 'SEMIFINAL'
+                                                  : 'RODADA ${r + 1}',
+                                              style: const TextStyle(
+                                                color: gold,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceAround,
+                                            children: [
+                                              for (
+                                                int m = 0;
+                                                m <
+                                                    ((rounds.first.length
+                                                            as int) >>
+                                                        r);
+                                                m++
+                                              )
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Padding(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 8,
+                                                            ),
+                                                        child: bracketMatch(
+                                                          r < rounds.length &&
+                                                                  m <
+                                                                      rounds[r]
+                                                                          .length
+                                                              ? Map<
+                                                                  String,
+                                                                  dynamic
+                                                                >.from(
+                                                                  rounds[r][m],
+                                                                )
+                                                              : null,
+                                                          context,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    if (r < total - 1)
+                                                      const SizedBox(
+                                                        width: 16,
+                                                        child: Divider(
+                                                          color: gold,
+                                                          thickness: 2,
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                    enterRoom('state', {'code': m['room']});
-                                  },
-                                )
-                              : null,
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                  ],
-                ],
-              ),
+                    ),
+                  ),
+              ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Fechar'),
-            ),
-          ],
         );
       },
     ),
   );
+
+  Widget bracketMatch(Map<String, dynamic>? match, BuildContext dialogContext) {
+    final teams =
+        match?['teams'] as List? ??
+        (match == null ? [null, null] : [match['players'], null]);
+    return TrucoPanel(
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (int i = 0; i < teams.length; i++)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  Icon(
+                    match?['winner'] != null &&
+                            entrantName(teams[i]) ==
+                                entrantName(match!['winner'])
+                        ? Icons.emoji_events
+                        : Icons.person_outline,
+                    size: 18,
+                    color: gold,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      teams[i] == null ? 'A definir' : entrantName(teams[i]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (match?['scores'] != null)
+                    Text(
+                      '${match!['scores'][i]}',
+                      style: const TextStyle(color: gold),
+                    ),
+                ],
+              ),
+            ),
+          if (match?['bye'] == true)
+            const Text(
+              'Folga • avanço automático',
+              style: TextStyle(fontSize: 10, color: gold),
+            ),
+          if (match != null && match['room'] != null && match['winner'] == null)
+            TextButton.icon(
+              icon: const Icon(Icons.visibility, size: 16),
+              label: Text(
+                (match['players'] as List).contains(uid)
+                    ? 'JOGAR AGORA'
+                    : 'ASSISTIR AO VIVO',
+              ),
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                if ((match['players'] as List).contains(uid)) {
+                  await enterRoom('state', {'code': match['room']});
+                } else {
+                  await run(() async {
+                    await api.spectate(match['room']);
+                    if (mounted) {
+                      refreshUI(() {
+                        room = Map<String, dynamic>.from(api.spectatedRoom!);
+                        screen = 'match';
+                      });
+                    }
+                  });
+                }
+              },
+            ),
+        ],
+      ),
+    );
+  }
 }

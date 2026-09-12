@@ -20,7 +20,39 @@ class TrucoService extends ChangeNotifier {
   bool disposed = false;
   WebSocketChannel? _socket;
   StreamSubscription<dynamic>? _subscription;
-  Timer? _ping, _retry;
+  Timer? _ping, _retry, _spectatorTimer;
+  String? spectatingCode;
+  Map<String, dynamic>? spectatedRoom;
+  bool _spectatorLoading = false;
+  void stopSpectating() {
+    _spectatorTimer?.cancel();
+    spectatingCode = null;
+    spectatedRoom = null;
+  }
+
+  Future<void> spectate(String code) async {
+    stopSpectating();
+    final result = await request('api/rooms/spectate', {'code': code});
+    spectatingCode = code;
+    spectatedRoom = result;
+    notifyListeners();
+    _spectatorTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (_spectatorLoading || disposed || spectatingCode != code) return;
+      _spectatorLoading = true;
+      try {
+        final result = await request('api/rooms/spectate', {'code': code});
+        if (!disposed && spectatingCode == code) {
+          spectatedRoom = result;
+          notifyListeners();
+        }
+      } catch (_) {
+        // Keep the last public state and retry on the next tick.
+      } finally {
+        _spectatorLoading = false;
+      }
+    });
+  }
+
   TrucoService({
     http.Client? client,
     this.url = defaultUrl,
@@ -126,6 +158,7 @@ class TrucoService extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    stopSpectating();
     await request('api/logout', {});
     token = null;
     data = {};
@@ -140,6 +173,7 @@ class TrucoService extends ChangeNotifier {
   @override
   void dispose() {
     disposed = true;
+    stopSpectating();
     _retry?.cancel();
     _ping?.cancel();
     _subscription?.cancel();

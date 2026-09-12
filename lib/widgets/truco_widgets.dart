@@ -349,7 +349,6 @@ class TrucoLogo extends StatelessWidget {
       filterQuality: FilterQuality.high,
     ),
   );
-
 }
 
 class FeltPainter extends CustomPainter {

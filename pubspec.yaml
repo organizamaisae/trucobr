@@ -1,7 +1,7 @@
 name: aurora_cards
 description: Aurora Truco online com partidas autoritativas e fichas virtuais.
 publish_to: none
-version: 3.2.0+5
+version: 3.3.0+6
 environment:
   sdk: ^3.13.0
 dependencies:
@@ -25,6 +25,8 @@ flutter:
     - assets/images/truco-br-bar-table.png
     - assets/images/truco-br-characters.png
     - assets/images/truco-br-login-logo.png
+    - assets/images/table-praia.png
+    - assets/images/table-serra.png
   fonts:
     - family: Inter
       fonts:

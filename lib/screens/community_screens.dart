@@ -291,6 +291,63 @@ extension _CommunityScreens on _AuroraAppState {
       ]),
     ],
   );
+
+  Widget monthlyPassPanel() {
+    final pass = api.data['monthly_pass'] as Map? ?? {};
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TrucoPanel(
+          child: Column(
+            children: [
+              const Icon(Icons.workspace_premium, color: gold, size: 64),
+              heading('Passe mensal • ${pass['month'] ?? ''}'),
+              Text('${pass['xp'] ?? 0} XP neste mês • 10 conquistas'),
+              const Text(
+                'Ganhe XP nas partidas e resgate fichas, verso Imperial, moldura Neon e Taverna da Serra.',
+                textAlign: TextAlign.center,
+              ),
+              if (pass['active'] != true)
+                GameButton(
+                  'ATIVAR • 3.000 FICHAS',
+                  onPressed: busy
+                      ? null
+                      : () => mutation('pass', {'action': 'buy'}),
+                ),
+            ],
+          ),
+        ),
+        for (final level in pass['levels'] as List? ?? [])
+          Card(
+            child: ListTile(
+              leading: CircleAvatar(child: Text('${level['level']}')),
+              title: Text('${level['target']} XP • ${level['chips']} fichas'),
+              subtitle: Text(
+                level['item'] == null
+                    ? 'Conquista mensal'
+                    : 'Inclui cosmético para sua coleção',
+              ),
+              trailing: TextButton(
+                onPressed:
+                    busy ||
+                        pass['active'] != true ||
+                        level['claimed'] == true ||
+                        (pass['xp'] ?? 0) < level['target']
+                    ? null
+                    : () => mutation('pass', {
+                        'action': 'claim',
+                        'level': level['level'],
+                      }),
+                child: Text(
+                  level['claimed'] == true ? 'Resgatado' : 'Resgatar',
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget shopScreen() {
     final inventory = extra['inventory'] as List? ?? [];
     final items = (extra['items'] as List? ?? [])
@@ -334,6 +391,7 @@ extension _CommunityScreens on _AuroraAppState {
           ),
         ),
         const SizedBox(height: 16),
+        if (shopTab == 'pass') monthlyPassPanel(),
         grid([
           for (final item in items)
             TrucoPanel(
@@ -411,6 +469,13 @@ extension _CommunityScreens on _AuroraAppState {
   Widget settingsScreen() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      SwitchListTile(
+        title: const Text('Sons do jogo'),
+        subtitle: const Text('Toques e aviso da sua vez'),
+        value: soundsEnabled,
+        onChanged: (v) => refreshUI(() => soundsEnabled = v),
+      ),
+
       if (api.data['admin_eligible'] == true &&
           api.data['can_create_tournaments'] != true)
         GameButton(

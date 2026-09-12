@@ -10,6 +10,7 @@ extension _MatchScreen on _AuroraAppState {
         'card': ?card,
         'value': ?value,
       });
+      if (soundsEnabled) SystemSound.play(SystemSoundType.click);
       await api.refresh();
     });
   }
@@ -21,12 +22,14 @@ extension _MatchScreen on _AuroraAppState {
         child: GameButton('VOLTAR AO INÍCIO', onPressed: () => go('home')),
       );
     }
+    final spectator = room['spectator'] == true;
     final members = room['members'] as List;
     final seat = g['seat'] as int, team = seat % 2;
     final pending = g['pending'] as Map?;
     final finished = g['winner'] != null;
-    final respond = pending != null && pending['team'] == team;
+    final respond = !spectator && pending != null && pending['team'] == team;
     final own =
+        !spectator &&
         g['turn'] == seat &&
         pending == null &&
         !g['hand_done'] &&
@@ -53,8 +56,14 @@ extension _MatchScreen on _AuroraAppState {
         ),
       ),
     );
-    return ColoredBox(
-      color: const Color(0xFF211407),
+    return Container(
+      decoration: BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage(barTableAsset(room['table'] ?? 'table-2')),
+          fit: BoxFit.cover,
+        ),
+      ),
+
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Column(
@@ -62,12 +71,30 @@ extension _MatchScreen on _AuroraAppState {
             Row(
               children: [
                 IconButton(
-                  onPressed: () => go('lobby'),
+                  onPressed: () => go(
+                    room['tournament'] != null || spectator
+                        ? 'tournaments'
+                        : 'lobby',
+                  ),
                   icon: const Icon(Icons.arrow_back_ios_new),
                 ),
-                score('Nós', scores[team], green),
+                if (!spectator)
+                  IconButton(
+                    tooltip: 'Enviar emote',
+                    icon: const Icon(Icons.sentiment_satisfied),
+                    onPressed: busy
+                        ? null
+                        : () => equipped['emote'] == null
+                              ? message('Equipe um emote na loja.')
+                              : mutation('rooms/emote', {'code': room['code']}),
+                  ),
+                score(spectator ? 'Dupla 1' : 'Nós', scores[team], green),
                 const SizedBox(width: 3),
-                score('Eles', scores[1 - team], const Color(0xFF98201B)),
+                score(
+                  spectator ? 'Dupla 2' : 'Eles',
+                  scores[1 - team],
+                  const Color(0xFF98201B),
+                ),
                 IconButton(
                   tooltip: 'Regras',
                   onPressed: showRules,
@@ -101,7 +128,9 @@ extension _MatchScreen on _AuroraAppState {
                         child: Column(
                           children: [
                             Text(
-                              index == seat ? 'Você' : members[index]['name'],
+                              index == seat && !spectator
+                                  ? 'Você'
+                                  : members[index]['name'],
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -126,10 +155,6 @@ extension _MatchScreen on _AuroraAppState {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        BarTable(
-                          table:
-                              room['table'] ?? equipped['table'] ?? 'table-2',
-                        ),
                         Positioned(
                           top: 12,
                           left: 16,
@@ -301,67 +326,61 @@ extension _MatchScreen on _AuroraAppState {
                 'Parceiro: ${(g['partner_hand'] as List).join('  ')}',
                 style: const TextStyle(fontSize: 11),
               ),
-            if (finished)
-              GameButton('VOLTAR AO INÍCIO', onPressed: () => go('home'))
+            if (spectator)
+              GameButton(
+                'SAIR DO MODO ESPECTADOR',
+                onPressed: () => go('tournaments'),
+              )
+            else if (finished)
+              GameButton(
+                'VOLTAR',
+                onPressed: () =>
+                    go(room['tournament'] != null ? 'tournaments' : 'home'),
+              )
             else if (g['hand_done'])
               GameButton(
                 'PRÓXIMA MÃO',
                 onPressed: busy ? null : () => playAction('next'),
               )
-            else ...[
-              if (respond)
-                GameButton(
-                  'ACEITAR',
-                  onPressed: busy ? null : () => playAction('accept'),
-                ),
+            else
               Row(
                 children: [
-                  for (final value in [3, 6, 9, 12])
+                  Expanded(
+                    child: GameButton(
+                      respond
+                          ? '${pending['value']}'
+                          : (g['stake'] == 1 ? 'TRUCO' : '${g['stake'] + 3}'),
+                      onPressed: busy || !api.connected
+                          ? null
+                          : respond
+                          ? () => playAction('accept')
+                          : own &&
+                                !scores.contains(11) &&
+                                g['stake'] < 12 &&
+                                (g['raise_owner'] == null ||
+                                    g['raise_owner'] == team)
+                          ? () => playAction(
+                              'raise',
+                              value: g['stake'] == 1 ? 3 : g['stake'] + 3,
+                            )
+                          : null,
+                    ),
+                  ),
+                  if (respond &&
+                      pending['special'] == false &&
+                      pending['value'] < 12)
                     Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 2),
-                        child: GameButton(
-                          {
-                            3: 'TRUCO',
-                            6: 'SEIS',
-                            9: 'NOVE',
-                            12: 'DOZE',
-                          }[value]!,
-                          color: {
-                            3: green,
-                            6: const Color(0xFFDA9406),
-                            9: const Color(0xFFBC520C),
-                            12: const Color(0xFFB92828),
-                          }[value]!,
-                          onPressed:
-                              busy ||
-                                  !api.connected ||
-                                  !(respond
-                                      ? pending['special'] == false &&
-                                            value == pending['value'] + 3
-                                      : own &&
-                                            !scores.contains(11) &&
-                                            value ==
-                                                (g['stake'] == 1
-                                                    ? 3
-                                                    : g['stake'] + 3) &&
-                                            (g['raise_owner'] == null ||
-                                                g['raise_owner'] == team))
-                              ? null
-                              : () => playAction('raise', value: value),
-                        ),
+                      child: GameButton(
+                        'AUMENTAR ${pending['value'] + 3}',
+                        onPressed: busy
+                            ? null
+                            : () => playAction(
+                                'raise',
+                                value: pending['value'] + 3,
+                              ),
                       ),
                     ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Regras da partida',
-                    onPressed: showRules,
-                    icon: const Icon(Icons.help_outline),
-                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: GameButton(
                       'CORRER',
@@ -371,18 +390,8 @@ extension _MatchScreen on _AuroraAppState {
                           : () => playAction('run'),
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Enviar emote',
-                    onPressed: busy
-                        ? null
-                        : () => equipped['emote'] == null
-                              ? message('Equipe um emote na loja.')
-                              : mutation('rooms/emote', {'code': room['code']}),
-                    icon: const Icon(Icons.sentiment_satisfied),
-                  ),
                 ],
               ),
-            ],
             if (room['emote'] != null)
               Text(
                 '${room['emote']['name']}: ${room['emote']['text']}',

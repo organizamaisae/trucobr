@@ -43,7 +43,23 @@ CATALOG += [dict(id=f'{kind}-{i+2}',kind=kind,name=name,price=price+i*200,icon=k
             for kind,names,price in [('table',['Boteco Clássico','Bar da Praia','Madeira Imperial'],1200),
               ('frame',['Cobre','Azul Neon','Rosa Neon'],800),('back',['Brasil','Azulejo','Imperial'],800),
               ('effect',['Aura Dourada','Faíscas Verdes'],1000)] for i,name in enumerate(names)]
-TABLES = ['table-0','table-1','table-2','table-3','table-4']
+CATALOG += [dict(id=f'emote-{i+2}',kind='emote',name=name,price=250+i*100,icon='face')
+            for i,name in enumerate(['É truco!','Boa dupla!','Respeita a mesa!','Até a próxima!'])]
+CATALOG += [dict(id='table-5',kind='table',name='Quiosque da Praia',price=1800,icon='table'),
+            dict(id='table-6',kind='table',name='Taverna da Serra',price=2200,icon='table')]
+CATALOG = [x for x in CATALOG if x['kind']!='pass']
+TABLES = ['table-0','table-1','table-2','table-3','table-4','table-5','table-6']
+
+def monthly_pass(u):
+    month=now().strftime('%Y-%m')
+    xp=sum(h.get('xp',0) for h in u['history'] if h['date'].startswith(month))
+    purchased=u.get('monthly_pass')==month
+    claims=u.get('pass_claims',[])
+    return dict(month=month,xp=xp,active=purchased,price=3000,levels=[
+        dict(level=i,target=i*200,chips=i*100,
+             item={3:'back-4',6:'frame-3',10:'table-6'}.get(i),
+             claimed=f'{month}:{i}' in claims) for i in range(1,11)])
+
 
 
 def tournament_view(t, uid):
@@ -156,6 +172,7 @@ def settle(db, r):
         for match in t['rounds'][-1]:
             if match['room'] == r['code']:
                 team = r['players'][g['winner']::2]
+                match['scores'] = g['scores'][:]
                 match['winner'] = team if t.get('mode') == '2v2' else team[0]
         if all(m['winner'] for m in t['rounds'][-1]):
             winners = [m['winner'] for m in t['rounds'][-1]]
@@ -210,6 +227,11 @@ def finish_tournament(db, t, winner):
 
 def begin_tournament(db, t):
     players = list(t['players'])
+    if any(r.get('tournament') and r['tournament'] != t['id'] and r['status']=='playing'
+           and set(players).intersection(r['players']) for r in all_of(db,'room')):
+        t['reason']='Aguardando inscritos concluírem a partida de outro torneio.'
+        put(db,'tournament:'+t['id'],'tournament',t)
+        return
     team_size = 2 if t.get('mode') == '2v2' else 1
     if team_size==2 and 'teams' in t:
         entrants=[x['members'][:] for x in t['teams'] if len(x['members'])==2]
@@ -218,6 +240,7 @@ def begin_tournament(db, t):
         players=complete
         if len(players) < 4:
             t.update(status='cancelled', reason='Duplas completas insuficientes no horário de início.')
+            refund_tournament_entries(db,t,t['players'])
             put(db,'tournament:'+t['id'],'tournament',t)
             return
     if len(players) < team_size*2:
@@ -242,7 +265,17 @@ def begin_tournament(db, t):
         secrets.SystemRandom().shuffle(entrants)
         t.update(actual_players=len(players), prize=t.get('custom_prize',len(players)*250), started_at=now().isoformat())
         tournament_round(db,t,entrants)
+    refund_tournament_entries(db,t,t['players'] if t['status']=='cancelled' else t.get('unpaired',[]))
     put(db,'tournament:'+t['id'],'tournament',t)
+
+
+def refund_tournament_entries(db,t,players):
+    for player_id in players:
+        if player_id not in t.setdefault('refunded',[]) and t.get('entry_fee'):
+            account=get(db,'user:'+player_id)
+            ledger(account,t['entry_fee'],'Inscrição devolvida: '+t['name'])
+            save_user(db,account)
+            t['refunded'].append(player_id)
 
 
 def start_due_tournaments(db, timestamp=None):
@@ -278,7 +311,7 @@ def dashboard(db, u):
     if not r:
         r = next((x for x in reversed(all_of(db, 'room')) if u['id'] in x['players'] and x['status'] in ['finished','closed']), None)
     return dict(profile=public(u), can_create_tournaments=can_create(u), admin_eligible=(u.get('email') or '').lower()==ADMIN_EMAIL, chips=u['chips'], earned=u['earned'], spent=u['spent'],
-                ledger=list(reversed(u['ledger'][-100:])), history=list(reversed(u['history'][-100:])),
+                monthly_pass=monthly_pass(u), ledger=list(reversed(u['ledger'][-100:])), history=list(reversed(u['history'][-100:])),
                 daily_available=u['daily'] != d, inventory=u['inventory'], missions=missions,
                 achievements=[dict(name=n, unlocked=u[k] >= v) for n, k, v in [('Primeira vitória', 'wins', 1), ('Dez vitórias', 'wins', 10), ('Invencível: 5 seguidas', 'best', 5), ('Nível 5', 'xp', 4000)]],
                 invites=pending_invites(db,u['id']),
@@ -476,6 +509,22 @@ def dispatch(db, u, path, b, method):
             ledger(u, m['reward'], m['name'])
         save_user(db, u)
         return dashboard(db, u)
+    if path == 'pass':
+        state=monthly_pass(u)
+        if b.get('action')=='buy':
+            if state['active']: fail('Passe deste mês já ativado.')
+            ledger(u,-state['price'],'Passe mensal '+state['month'])
+            u['monthly_pass']=state['month']
+        elif b.get('action')=='claim':
+            level=next((x for x in state['levels'] if x['level']==b.get('level')),None)
+            if not state['active'] or not level or level['claimed'] or state['xp']<level['target']:
+                fail('Recompensa indisponível.')
+            ledger(u,level['chips'],'Passe mensal: nível '+str(level['level']))
+            if level['item'] and level['item'] not in u['inventory']: u['inventory'].append(level['item'])
+            u.setdefault('pass_claims',[]).append(f"{state['month']}:{level['level']}")
+        else: fail('Ação inválida.')
+        save_user(db,u)
+        return dashboard(db,u)
     if path == 'shop':
         if method == 'POST':
             item = next((x for x in CATALOG if x['id'] == b.get('id')), None)
@@ -567,6 +616,16 @@ def dispatch(db, u, path, b, method):
         if not r:
             fail('Sala não encontrada. Confira o código.', 404)
         action = path.split('/')[-1]
+        if action == 'spectate':
+            if not r.get('tournament') or r['status'] not in ['playing','finished']:
+                fail('Esta partida não está disponível para espectadores.')
+            result=room_view(db,r,uid)
+            g=r.get('game')
+            if not g: fail('Partida ainda não iniciada.')
+            result['spectator']=True
+            result['game']={k:v for k,v in g.items() if k not in ['hands','partner_hand']}
+            result['game'].update(hand=[],seat=0,counts=[len(h) for h in g['hands']])
+            return result
         if action not in ['join','start','leave','action','state','emote']:
             fail('Rota não encontrada.',404)
         if action == 'join' and uid not in r['players']:
@@ -661,11 +720,15 @@ def dispatch(db, u, path, b, method):
                     fail('Somente o criador administrador pode excluir este torneio.', 403)
                 if t.get('status') == 'playing':
                     fail('Não é possível excluir um torneio em andamento.')
+                if t['status']=='waiting' and t.get('entry_fee'):
+                    for player_id in t['players']:
+                        account=get(db,'user:'+player_id)
+                        ledger(account,t['entry_fee'],'Torneio excluído: inscrição devolvida')
+                        save_user(db,account)
                 delete(db, 'tournament:'+tid)
                 ts = [x for x in all_of(db,'tournament') if x.get('created_by') or x['status']!='waiting' or x['players']]
                 return dict(tournaments=[tournament_view(x,uid) for x in ts[-30:]], names={p['id']:p['name'] for p in all_of(db,'user')})
-            if any(uid in x['players'] and x['status'] in ['waiting','playing'] and x['id'] != tid for x in all_of(db,'tournament')):
-                fail('Conclua sua sala ou torneio atual.')
+
             if t['status'] != 'waiting':
                 fail('Inscrições encerradas.')
             if b.get('action')=='leave' and uid in t['players']:

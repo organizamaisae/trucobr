@@ -335,8 +335,13 @@ void main() {
     await tester.ensureVisible(find.text('ACOMPANHAR').last);
     await tester.tap(find.text('ACOMPANHAR').last);
     await tester.pumpAndSettle();
-    expect(find.text('Gustavo + Lia × Rafa + Ana'), findsOneWidget);
-    await tester.tap(find.text('Fechar'));
+    expect(find.text('Gustavo + Lia'), findsOneWidget);
+    expect(find.text('Rafa + Ana'), findsOneWidget);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/bracket.png'),
+    );
+    await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
     final trophy = {
       'id': 'cup',
@@ -350,21 +355,143 @@ void main() {
     service.data['profile']['trophies'] = [trophy];
     service.notifyListeners();
     await tester.pumpAndSettle();
-    expect(find.text('CAMPEÃO!'), findsOneWidget);
-    await expectLater(
-      find.byType(MaterialApp),
-      matchesGoldenFile('goldens/tournament_champion.png'),
-    );
-    await tester.tap(find.text('CONTINUAR'));
-    await tester.pumpAndSettle();
-    service.notifyListeners();
-    await tester.pumpAndSettle();
     expect(find.text('CAMPEÃO!'), findsNothing);
     await tester.tap(find.text('Perfil').last);
     await tester.pumpAndSettle();
     expect(find.text('Copa dos Amigos'), findsOneWidget);
   });
 
+  testWidgets('Monthly pass shows earned XP and rewards', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = FixtureService();
+    service.data['monthly_pass'] = {
+      'month': '2026-09',
+      'xp': 600,
+      'active': true,
+      'price': 3000,
+      'levels': [
+        for (int i = 1; i <= 10; i++)
+          {
+            'level': i,
+            'target': i * 200,
+            'chips': i * 100,
+            'claimed': i == 1,
+            'item': i == 3 ? 'back-4' : null,
+          },
+      ],
+    };
+    await tester.pumpWidget(AuroraApp(service: service));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Loja').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Passe'));
+    await tester.tap(find.text('Passe'));
+    await tester.pumpAndSettle();
+    expect(find.text('600 XP neste mês • 10 conquistas'), findsOneWidget);
+    expect(find.text('Resgatado'), findsOneWidget);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/monthly_pass.png'),
+    );
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Eight player bracket and spectator controls', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = FixtureService();
+    service.data['tournament_names'] = {
+      for (int i = 0; i < 8; i++) 'p$i': 'Jogador ${i + 1}',
+    };
+    service.data['tournaments'] = [
+      {
+        'id': 'tree',
+        'name': 'Copa da Praia',
+        'mode': '1v1',
+        'size': 8,
+        'players': <String>[],
+        'status': 'playing',
+        'starts_at': '2026-09-15T21:00:00Z',
+        'rounds': [
+          [
+            for (int i = 0; i < 4; i++)
+              {
+                'room': 'LIVE$i',
+                'players': ['p${i * 2}', 'p${i * 2 + 1}'],
+                'teams': [
+                  ['p${i * 2}'],
+                  ['p${i * 2 + 1}'],
+                ],
+                'winner': null,
+              },
+          ],
+        ],
+      },
+    ];
+    await tester.pumpWidget(AuroraApp(service: service));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Torneios').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ACOMPANHAR'));
+    await tester.pumpAndSettle();
+    expect(find.text('SEMIFINAL'), findsOneWidget);
+    expect(find.text('ASSISTIR AO VIVO'), findsNWidgets(4));
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/bracket_eight.png'),
+    );
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+    service.spectatingCode = 'LIVE0';
+    service.spectatedRoom = {
+      'code': 'LIVE0',
+      'tournament': 'tree',
+      'spectator': true,
+      'status': 'playing',
+      'table': 'table-5',
+      'rule': 'paulista',
+      'members': [profile('p0', 'Rafa'), profile('p1', 'Lia')],
+      'game': {
+        'seat': 0,
+        'turn': 0,
+        'scores': [3, 6],
+        'counts': [3, 3],
+        'hand': <String>[],
+        'pending': null,
+        'winner': null,
+        'table': <dynamic>[],
+        'hand_done': false,
+        'vira': 'Q♦',
+        'hand_no': 1,
+        'stake': 1,
+      },
+    };
+    service.notifyListeners();
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => precacheImage(
+        const AssetImage('assets/images/table-praia.png'),
+        tester.element(find.byType(Scaffold)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('TRUCO'), findsNothing);
+    expect(find.text('CORRER'), findsNothing);
+    expect(find.text('Agora é Você'), findsNothing);
+    expect(find.byType(TrucoCard), findsOneWidget);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/spectator_praia.png'),
+    );
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('SAIR DO MODO ESPECTADOR'));
+    await tester.pumpAndSettle();
+    expect(service.spectatingCode, isNull);
+  });
   testWidgets('Room invite overlays profile and open dialog, then joins', (
     tester,
   ) async {

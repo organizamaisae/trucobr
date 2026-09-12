@@ -8,6 +8,7 @@ import '../widgets/truco_widgets.dart';
 import '../widgets/br_art.dart';
 import '../widgets/tournament_trophy.dart';
 import '../widgets/bar_table.dart';
+import '../widgets/bracket_lines.dart';
 part '../screens/home/home_screen.dart';
 part '../screens/profile/profile_screen.dart';
 part '../screens/private_room/private_room_screen.dart';
@@ -41,6 +42,7 @@ class _AuroraAppState extends State<AuroraApp> {
   bool turnFlash = false;
   bool tournamentBaseline = false;
   String lastTurn = '';
+  bool soundsEnabled = true;
   String promptedTournamentRoom = '';
   Timer? turnTimer;
   final Set<String> hiddenInvites = {};
@@ -98,7 +100,9 @@ class _AuroraAppState extends State<AuroraApp> {
 
   void changed() {
     if (!mounted) return;
-    final incoming = api.data['room'];
+    final incoming = api.spectatingCode == null
+        ? api.data['room']
+        : api.spectatedRoom;
     setState(() {
       for (final t in api.data['tournaments'] as List? ?? []) {
         if (knownTournaments.add(t['id'].toString()) &&
@@ -127,6 +131,7 @@ class _AuroraAppState extends State<AuroraApp> {
         }
         final g = room['game'] as Map?;
         final isTurn =
+            room['spectator'] != true &&
             room['status'] == 'playing' &&
             g != null &&
             g['turn'] == g['seat'] &&
@@ -138,6 +143,7 @@ class _AuroraAppState extends State<AuroraApp> {
             : '';
         if (isTurn && lastTurn != key) {
           turnFlash = true;
+          if (soundsEnabled) SystemSound.play(SystemSoundType.click);
           turnTimer?.cancel();
           turnTimer = Timer(
             const Duration(milliseconds: 1400),
@@ -146,7 +152,9 @@ class _AuroraAppState extends State<AuroraApp> {
         }
         lastTurn = key;
         if (room['status'] == 'playing' && started && screen != 'match') {
-          if (room['tournament'] != null) {
+          if (room['spectator'] == true) {
+            screen = 'match';
+          } else if (room['tournament'] != null) {
             if (promptedTournamentRoom != room['code']) {
               promptedTournamentRoom = room['code'].toString();
               WidgetsBinding.instance.addPostFrameCallback(
@@ -160,23 +168,6 @@ class _AuroraAppState extends State<AuroraApp> {
         }
       }
     });
-    for (final trophy in me['trophies'] as List? ?? []) {
-      if (seenTrophies.add(trophy['id'].toString())) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) showChampion(Map<String, dynamic>.from(trophy));
-        });
-      }
-    }
-    for (final t in api.data['tournaments'] as List? ?? []) {
-      if (t['status'] == 'finished' &&
-          (t['players'] as List).contains(uid) &&
-          seenFinals.add(t['id'].toString()) &&
-          !(t['champions'] as List? ?? []).contains(uid)) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) showBracket(Map<String, dynamic>.from(t));
-        });
-      }
-    }
   }
 
   void orient(bool match) {
@@ -205,6 +196,7 @@ class _AuroraAppState extends State<AuroraApp> {
   }
 
   Future<void> go(String target) async {
+    if (target != 'match') api.stopSpectating();
     orient(target == 'match');
     setState(() {
       screen = target;
