@@ -641,10 +641,11 @@ def dispatch(db, u, path, b, method):
         tid=secrets.token_hex(5)
         table=b.get('table','table-2')
         table_text=str(b.get('table_text','TRUCO BR')).strip()
+        entry_fee=b.get('entry_fee', 0)
         prize=b.get('prize',size*250)
-        if table not in TABLES or len(table_text)>40 or type(prize) is not int or not 0<=prize<=1000000 or (mode=='2v2' and prize%2):
+        if table not in TABLES or len(table_text)>40 or type(entry_fee) is not int or entry_fee not in TIERS+[0] or type(prize) is not int or not 0<=prize<=1000000 or (mode=='2v2' and prize%2):
             fail('Confira a mesa, frase de até 40 caracteres e premiação de 0 a 1.000.000 (par em duplas).')
-        t=dict(id=tid,name=name,size=size,mode=mode,rule=rule,starts_at=starts_at,table=table,table_text=table_text,custom_prize=prize,players=[],rounds=[],status='waiting',winner=None,created_by=uid,created_at=now().isoformat())
+        t=dict(id=tid,name=name,size=size,mode=mode,rule=rule,starts_at=starts_at,table=table,table_text=table_text,entry_fee=entry_fee,custom_prize=prize,players=[],rounds=[],status='waiting',winner=None,created_by=uid,created_at=now().isoformat())
         if mode=='2v2': t['teams']=[]
         put(db,'tournament:'+tid,'tournament',t)
         return dict(**dispatch(db,u,'tournaments',{},'GET'), created=tournament_view(t,uid))
@@ -669,10 +670,20 @@ def dispatch(db, u, path, b, method):
                 fail('Inscrições encerradas.')
             if b.get('action')=='leave' and uid in t['players']:
                 t['players'].remove(uid)
+                fee=t.get('entry_fee', 0)
+                if fee:
+                    ledger(u, fee, 'Inscrição devolvida: '+t['name'])
+                    save_user(db, u)
                 for pair in t.get('teams',[]):
                     if uid in pair['members']: pair['members'].remove(uid)
                 t['teams']=[x for x in t.get('teams',[]) if x['members']] if 'teams' in t else t.get('teams',[])
             elif b.get('action','join')=='join' and uid not in t['players'] and len(t['players'])<t['size']:
+                fee=t.get('entry_fee', 0)
+                if u['chips'] < fee:
+                    fail('Saldo de fichas insuficiente para a inscrição.')
+                if fee:
+                    ledger(u, -fee, 'Inscrição no torneio '+t['name'])
+                    save_user(db, u)
                 if t.get('mode')=='2v2' and 'teams' in t:
                     if b.get('team_action')=='create':
                         if len(t['teams'])>=t['size']//2:

@@ -343,6 +343,13 @@ class TrucoLogo extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
     width: size * 1.6,
     height: size * 1.32,
+    child: Image.asset(
+      'assets/images/truco-br-logo.png',
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
+    ),
+  );
+/*
     child: Column(
       children: [
         SizedBox(
@@ -405,7 +412,7 @@ class TrucoLogo extends StatelessWidget {
         ),
       ],
     ),
-  );
+  );*/
 }
 
 class FeltPainter extends CustomPainter {

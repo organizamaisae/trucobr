@@ -1,6 +1,35 @@
 part of '../core/app.dart';
 
 extension _Tournaments on _AuroraAppState {
+  Future<void> showTournamentMatchPrompt() async {
+    if (!mounted) return;
+    final play = await showDialog<bool>(
+      context: navigator.currentContext!,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Sua partida está pronta'),
+        content: const Text(
+          'Entre na mesa do torneio em até 1min35s. Se o prazo terminar, você perderá por WO.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('DEPOIS'),
+          ),
+          GameButton(
+            'JOGAR AGORA',
+            color: green,
+            onPressed: () => Navigator.pop(context, true),
+          ),
+        ],
+      ),
+    );
+    if (play == true && mounted) {
+      refreshUI(() => screen = 'match');
+      orient(true);
+    }
+  }
+
   Future<void> enrollTournament(Map<String, dynamic> t) async {
     final joined = (t['players'] as List).contains(uid);
     final body = <String, dynamic>{
@@ -153,7 +182,8 @@ extension _Tournaments on _AuroraAppState {
     final phraseInput = TextEditingController(text: 'TRUCO BR');
     String table = 'table-2';
     String mode = '1v1';
-    DateTime start = DateTime.now().add(const Duration(hours: 1));
+    int entryFee = 0;
+    DateTime? start;
     String? error;
     final result = await showDialog<Map<String, dynamic>>(
       context: navigator.currentContext!,
@@ -185,6 +215,20 @@ extension _Tournaments on _AuroraAppState {
                     selected: {mode},
                     onSelectionChanged: (v) => update(() => mode = v.first),
                   ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    initialValue: entryFee,
+                    decoration: const InputDecoration(
+                      labelText: 'Taxa de inscrição (fichas)',
+                    ),
+                    items: const [0, 100, 500, 1000, 5000, 10000]
+                        .map((value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value == 0 ? 'Grátis' : '$value fichas'),
+                            ))
+                        .toList(),
+                    onChanged: (value) => update(() => entryFee = value ?? 0),
+                  ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: slots,
@@ -200,19 +244,25 @@ extension _Tournaments on _AuroraAppState {
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.calendar_month, color: gold),
                     title: const Text('Horário de início'),
-                    subtitle: Text(tournamentDate(start.toIso8601String())),
+                    subtitle: Text(
+                      start == null
+                          ? 'Toque para escolher a data e o horário'
+                          : tournamentDate(start!.toIso8601String()),
+                    ),
                     trailing: const Icon(Icons.edit_calendar),
                     onTap: () async {
                       final date = await showDatePicker(
                         context: context,
-                        initialDate: start,
+                        initialDate: DateTime.now().add(const Duration(hours: 1)),
                         firstDate: DateTime.now(),
                         lastDate: DateTime.now().add(const Duration(days: 365)),
                       );
                       if (date == null || !context.mounted) return;
                       final time = await showTimePicker(
                         context: context,
-                        initialTime: TimeOfDay.fromDateTime(start),
+                        initialTime: TimeOfDay.fromDateTime(
+                          start ?? DateTime.now().add(const Duration(hours: 1)),
+                        ),
                       );
                       if (time != null && context.mounted) {
                         update(
@@ -300,7 +350,7 @@ extension _Tournaments on _AuroraAppState {
                     n < 2 ||
                     n > 256 ||
                     (mode == '2v2' && (n < 4 || n.isOdd)) ||
-                    !start.isAfter(DateTime.now()) ||
+                    start == null || !start!.isAfter(DateTime.now()) ||
                     prize < 0 ||
                     prize > 1000000 ||
                     (mode == '2v2' && prize.isOdd)) {
@@ -313,7 +363,8 @@ extension _Tournaments on _AuroraAppState {
                   'name': tournamentNameInput.text.trim(),
                   'size': n,
                   'mode': mode,
-                  'starts_at': start.toUtc().toIso8601String(),
+                  'starts_at': start!.toUtc().toIso8601String(),
+                  'entry_fee': entryFee,
                   'table': table,
                   'table_text': phraseInput.text.trim(),
                   'prize': prize,
@@ -704,6 +755,12 @@ extension _Tournaments on _AuroraAppState {
                           Text(
                             t['mode'] ?? '1v1',
                             style: const TextStyle(fontSize: 11),
+                          ),
+                          Text(
+                            (t['entry_fee'] ?? 0) == 0
+                                ? 'Grátis'
+                                : 'Entrada: ${number(t['entry_fee'])}',
+                            style: const TextStyle(fontSize: 11, color: gold),
                           ),
                           const Text(
                             'Truco Paulista',

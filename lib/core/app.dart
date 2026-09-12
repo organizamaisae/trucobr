@@ -41,6 +41,7 @@ class _AuroraAppState extends State<AuroraApp> {
   bool turnFlash = false;
   bool tournamentBaseline = false;
   String lastTurn = '';
+  String promptedTournamentRoom = '';
   Timer? turnTimer;
   final Set<String> hiddenInvites = {};
   bool busy = false, restoring = true, showPassword = false;
@@ -145,8 +146,17 @@ class _AuroraAppState extends State<AuroraApp> {
         }
         lastTurn = key;
         if (room['status'] == 'playing' && started && screen != 'match') {
-          screen = 'match';
-          orient(true);
+          if (room['tournament'] != null) {
+            if (promptedTournamentRoom != room['code']) {
+              promptedTournamentRoom = room['code'].toString();
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => showTournamentMatchPrompt(),
+              );
+            }
+          } else {
+            screen = 'match';
+            orient(true);
+          }
         }
       }
     });

@@ -140,7 +140,12 @@ extension _CommunityScreens on _AuroraAppState {
                     ),
                   ),
                 ),
-                PlayerAvatar(p['name'], size: 36),
+                PlayerAvatar(
+                  p['name'],
+                  size: 36,
+                  cosmetic: (p['equipped'] as Map?)?['avatar']?.toString(),
+                  frame: (p['equipped'] as Map?)?['frame']?.toString(),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
