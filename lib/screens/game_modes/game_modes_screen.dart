@@ -26,19 +26,7 @@ extension _ModesScreen on _AuroraAppState {
             color: const Color(0xFF3D2E1B),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: tier.$3.withValues(alpha: .2),
-                    border: Border.all(color: tier.$3, width: 2),
-                  ),
-                  child: Icon(
-                    Icons.workspace_premium,
-                    color: tier.$3,
-                    size: 30,
-                  ),
-                ),
+                ChipStack(tier.$3),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -47,7 +35,7 @@ extension _ModesScreen on _AuroraAppState {
                       Text(
                         'Mesa ${tier.$1}',
                         style: const TextStyle(
-                          fontSize: 18,
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -58,8 +46,8 @@ extension _ModesScreen on _AuroraAppState {
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Jogar na mesa ${tier.$1}',
+                GameButton(
+                  'Entrar',
                   onPressed: busy || (api.data['chips'] as num? ?? 0) < tier.$2
                       ? null
                       : () => enterRoom('quick', {
@@ -67,7 +55,6 @@ extension _ModesScreen on _AuroraAppState {
                           'fee': tier.$2,
                           'rule': rule,
                         }),
-                  icon: const Icon(Icons.chevron_right),
                 ),
               ],
             ),

@@ -1,5 +1,7 @@
 # Verificação visual
 
+Atualização v3: nova referência brasileira aplicada. Login ganhou fundo de madeira/tecido; início ganhou banner ilustrado, JOGAR amarelo e SALA PRIVADA verde; fichas desenhadas substituem medalhas das mesas. Torneios começa vazio e criação aparece apenas para administrador. Arte e prompts em `docs/arte-truco-br.md`. Captura adicional: `test/goldens/truco_br_login.png`. As capturas `truco_*.png` foram atualizadas para Truco BR.
+
 As capturas de teste ficam em `test/goldens/truco_*.png`. Retrato de referência: 390×844; mesa horizontal: 844×390. A navegação também é testada em paisagem. As capturas antigas sem prefixo `truco_` pertencem ao projeto de poker e não são baselines da nova versão.
 
 Na revisão inicial foram identificados overflow da marca, campo de regras largo e glifos ausentes nos naipes. A marca recebeu ajuste de escala, o seletor passou a expandir dentro do painel e os naipes foram redesenhados com CustomPainter. A mesa recebeu quatro posições, espaço para as cartas e botões de desafio habilitados conforme o estado recebido do servidor.

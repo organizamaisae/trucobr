@@ -1,5 +1,7 @@
 import os
 import tempfile
+os.environ['TRUCO_STORAGE']='sqlite'
+os.environ['ADMIN_SETUP_CODE']='test-admin-code-not-production'
 os.environ['DATABASE_URL'] = 'sqlite:///' + os.path.join(tempfile.mkdtemp(), 'test.db').replace('\\','/')
 import pytest
 from fastapi.testclient import TestClient
@@ -133,7 +135,10 @@ def test_engine_raises_ties_and_eleven():
 
 def test_tournament_starts_with_eight_real_players(client):
     users=[account(client,'User'+str(i)) for i in range(8)]
-    ts=client.get('/api/tournaments',headers=users[0][1]).json()['tournaments']
+    admin=client.post('/auth/register',json=dict(name='Gustavo',email='gustavoluzmachado@gmail.com',password='StrongPassword123',admin_code='test-admin-code-not-production')).json()
+    ha={'Authorization':'Bearer '+admin['token']}
+    assert client.get('/api/tournaments',headers=ha).json()['tournaments']==[]
+    ts=post(client,ha,'tournaments/create',name='Torneio BR',size=8)['tournaments']
     tid=next(t['id'] for t in ts if t['size']==8)
     for d,h in users:
         response=post(client,h,'tournaments',id=tid)

@@ -24,11 +24,13 @@ Map<String, dynamic> profile(String id, String name) => {
 };
 
 class FixtureService extends TrucoService {
-  FixtureService({bool signedIn = true}) {
+  Map<String, dynamic>? lastTournament;
+  FixtureService({bool signedIn = true, bool admin = false}) {
     token = signedIn ? 'test' : null;
     connected = true;
     data = {
       'profile': profile('a', 'Gustavo'),
+      'can_create_tournaments': admin,
       'chips': 10250,
       'earned': 10550,
       'spent': 300,
@@ -95,15 +97,18 @@ class FixtureService extends TrucoService {
       };
     }
     if (path.contains('tournaments')) {
+      if (path.endsWith('/create')) lastTournament = body;
       return {
         'tournaments': [
-          {
-            'id': 't',
-            'size': 8,
-            'players': [],
-            'rounds': [],
-            'status': 'waiting',
-          },
+          if (lastTournament != null)
+            {
+              'id': 't',
+              'name': lastTournament!['name'],
+              'size': lastTournament!['size'],
+              'players': [],
+              'rounds': [],
+              'status': 'waiting',
+            },
         ],
       };
     }
@@ -152,6 +157,10 @@ void main() {
     service.dispose();
   });
   testWidgets('Login has email/password and no social login', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       AuroraApp(service: FixtureService(signedIn: false)),
     );
@@ -159,7 +168,39 @@ void main() {
     expect(find.text('E-mail'), findsOneWidget);
     expect(find.text('Senha'), findsOneWidget);
     expect(find.textContaining('Google'), findsNothing);
+    await tester.runAsync(
+      () => precacheImage(
+        const AssetImage('assets/images/truco-br-background.png'),
+        tester.element(find.byType(Scaffold)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/truco_br_login.png'),
+    );
   });
+  for (final admin in [false, true]) {
+    testWidgets('Tournament creation visibility admin=$admin', (tester) async {
+      final service = FixtureService(admin: admin);
+      await tester.pumpWidget(AuroraApp(service: service));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('TORNEIOS'));
+      await tester.tap(find.text('TORNEIOS'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Nenhum torneio publicado'), findsOneWidget);
+      expect(find.text('CRIAR TORNEIO'), admin ? findsOneWidget : findsNothing);
+      if (admin) {
+        await tester.tap(find.text('CRIAR TORNEIO'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField), 'Torneio BR');
+        await tester.tap(find.text('Publicar'));
+        await tester.pumpAndSettle();
+        expect(service.lastTournament, {'name': 'Torneio BR', 'size': 8});
+        expect(find.text('Torneio BR • 8 jogadores'), findsOneWidget);
+      }
+    });
+  }
   for (final size in [const Size(390, 844), const Size(844, 390)]) {
     testWidgets('All screens responsive at $size', (tester) async {
       tester.view.physicalSize = size;

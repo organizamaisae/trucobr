@@ -1,54 +1,99 @@
-# Aurora Truco Online
+# Truco BR — versão 3
 
-Conversão do projeto Aurora Cards/Poker para Flutter + Python. Login por e-mail/senha ou convidado, **sem Google**. Não há bots, dinheiro real, depósitos, compras de fichas com dinheiro nem saques.
+Mesmo aplicativo Flutter e mesmo backend Python/multiplayer, agora com o visual brasileiro da referência e MongoDB. O endereço do servidor continua `https://aurora-z5xt.onrender.com`. Login por e-mail/senha ou convidado, sem Google. Não há bots nem operações com dinheiro real.
 
-## Executar o backend
+## O que mudou
 
-Python 3.13 ou superior. Na pasta do projeto:
+- Nome exibido **Truco BR**, versão `3.0.0+3`; identificador Android preservado para atualizar o aplicativo existente.
+- Interface verde escura, madeira, dourado, banner e avatar originais, JOGAR amarelo, salas privadas com abas, fichas desenhadas em código.
+- **Nenhum torneio é criado automaticamente.** A lista começa vazia. Eventos são publicados pelo administrador no aplicativo; continuam começando quando completam 8, 16 ou 32 jogadores reais.
+- Somente a conta `gustavoluzmachado@gmail.com`, ativada com código privado, pode criar torneios. A API valida essa permissão em cada criação, independentemente da interface.
+- Persistência MongoDB com transações para salas, usuários, fichas, sessões, loja, amigos e torneios.
+
+## Banco informado
+
+A credencial fornecida foi configurada apenas no arquivo local **`.env`**, ignorado pelo Git e excluído dos pacotes ZIP. Não há senha do banco no código Flutter/Python. O banco selecionado é **`quizeid`**, mesmo que a URI tenha `/QuizID`: `MONGODB_DB` determina o banco efetivamente usado pelo driver. A coleção do aplicativo é **`truco_br_records`**; outras coleções não são apagadas nem reutilizadas.
+
+Configuração esperada:
+
+```dotenv
+MONGODB_URI=COLE_AQUI_SUA_URI_COMPLETA
+MONGODB_DB=quizeid
+ADMIN_SETUP_CODE=SEU_CODIGO_PRIVADO_DE_ATIVACAO
+TRUCO_STORAGE=mongo
+PORT=5000
+```
+
+O `.env` é carregado automaticamente; variáveis do ambiente têm prioridade. O ZIP traz apenas `.env.example`, sem credenciais. Dados do antigo PostgreSQL/SQLite **não são migrados automaticamente** para o MongoDB.
+
+### Situação da conexão
+
+O teste contra o cluster informado falhou durante o handshake TLS (`ServerSelectionTimeoutError`). Isso aconteceu antes de confirmar autenticação ou gravar dados. Não foi desativada a verificação de certificados. Portanto, a configuração está pronta, mas **o acesso ao Atlas ainda precisa ser liberado/verificado**.
+
+No Atlas:
+
+1. Confira se o cluster está ativo.
+2. Em **Security → Network Access**, adicione o IP público atual do computador para testes locais.
+3. Para o Render, adicione os IPs de saída do serviço, exibidos no painel do Render.
+4. Em **Database Access**, confira se o usuário da URI tem acesso de leitura/escrita ao banco `quizeid`.
+5. Teste novamente sem alterar ou remover TLS:
+
+```powershell
+.\.venv\Scripts\python server/check_mongo.py
+```
+
+O teste faz ping e verifica gravação/leitura/rollback de uma transação com identificador aleatório. Não apaga dados existentes e não imprime a senha. Referência: https://www.mongodb.com/docs/atlas/troubleshoot-connection/
+
+## Executar localmente
+
+Na pasta do projeto:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
-$env:DATABASE_URL = "postgresql+psycopg://USUARIO:SENHA@HOST:5432/BANCO"
-.\.venv\Scripts\python server/server.py --host 0.0.0.0 --port 8000
+.\.venv\Scripts\python server/check_mongo.py
+.\.venv\Scripts\python server/server.py
 ```
 
-As tabelas são criadas automaticamente. Para desenvolvimento rápido, sem `DATABASE_URL`, usa SQLite em `truco.db`. **No Render configure PostgreSQL**, pois o disco temporário do serviço não preserva SQLite em novos deploys. Não publique `.env`, senhas ou tokens no GitHub. `.env.example` é um exemplo; configure variáveis no terminal/Render, o arquivo não é carregado automaticamente.
+Porta padrão **5000**. Saúde: `http://127.0.0.1:5000/health`; documentação: `/docs`; WebSocket: `/ws`.
 
-Alternativa local com Docker e PostgreSQL:
+Com Docker, configure `.env` e execute `docker compose up --build`. O container conecta ao Atlas informado, não cria outro banco.
 
-```powershell
-$env:POSTGRES_PASSWORD = "defina-uma-senha-forte"
-docker compose up --build
-```
+## Atualizar o mesmo Render
 
-HTTP: `/health`; documentação interativa da API: `/docs`; WebSocket: `/ws`. O primeiro frame WebSocket deve ser `{"token":"TOKEN_DA_SESSAO"}`. Cartas de outros jogadores nunca são enviadas. A API REST usa `Authorization: Bearer TOKEN`.
-
-## Atualizar seu Render
-
-1. Envie os arquivos modificados deste projeto ao repositório `fxzazx/aurora` (incluindo `server/`, `requirements.txt` e `render.yaml`).
-2. Crie/associe um PostgreSQL no Render. No serviço web, em **Environment**, adicione `DATABASE_URL` com a **Internal Database URL** do banco. URLs começando por `postgres://` ou `postgresql://` são aceitas.
+1. Envie esta versão ao mesmo GitHub `fxzazx/aurora`.
+2. No serviço web existente, mantenha **Root Directory** vazio e branch `main`.
 3. **Build Command:** `pip install -r requirements.txt`
 4. **Start Command:** `python server/server.py --host 0.0.0.0 --port $PORT`
-5. **Health Check Path:** `/health`. Use **uma instância e um worker**; a autoridade e as conexões WebSocket ficam nesse processo. Não aumente workers sem implementar coordenação distribuída.
-6. Faça **Manual Deploy → Deploy latest commit**.
-7. Abra `https://aurora-z5xt.onrender.com/health`. O backend novo deve retornar `{"status":"ok","app":"Aurora Truco","version":2}`. Se não houver `version: 2`, você ainda está usando o servidor antigo.
+5. **Health Check Path:** `/health`
+6. Em **Environment**, configure `MONGODB_URI`, `MONGODB_DB=quizeid` e `ADMIN_SETUP_CODE` com os valores do seu `.env` local. Use `PYTHON_VERSION=3.13.7`. Remova `TRUCO_STORAGE=sqlite`, se existir. O antigo `DATABASE_URL` não é usado no modo MongoDB.
+7. Libere no Atlas os IPs de saída do Render.
+8. Faça **Manual Deploy → Deploy latest commit**.
 
-O `render.yaml` preserva o comando anterior. Em instalação por Blueprint, ele solicitará `DATABASE_URL`. Ele não cria nem contrata banco automaticamente. Consulte no painel do Render as condições do plano escolhido. O aplicativo tenta reconectar quando o servidor reinicia; a primeira requisição tem timeout de 60 segundos.
+O Render define sua própria variável `PORT`; mantenha `$PORT` no comando. Não altere a URL do aplicativo, não crie outro serviço e não coloque a URI do banco no APK.
 
-## Onde colocar a URL no aplicativo
+Resposta esperada em `https://aurora-z5xt.onrender.com/health`:
 
-O padrão já é **https://aurora-z5xt.onrender.com**, em `lib/services/truco_service.dart`, constante `defaultUrl`. Você pode substituir **sem editar código**:
-
-```powershell
-flutter run --dart-define=SERVER_URL=https://aurora-z5xt.onrender.com
+```json
+{"status":"ok","app":"Truco BR","version":3}
 ```
 
-Não adicione `/health`, `/api`, `/rooms` ou Markdown à URL. O aplicativo acrescenta os caminhos corretos. Se usar o backend no computador com emulador Android: `http://10.0.2.2:8000`. Em aparelho físico, use o IP local do computador na mesma rede. HTTP local funciona no Android debug; prefira HTTPS em distribuição.
+## Ativar seu administrador e criar torneios
 
-## Gerar o APK no Windows
+O código de ativação impede que alguém ganhe acesso administrativo simplesmente cadastrando seu e-mail. O valor foi gerado em **`ADMIN_SETUP_CODE` no `.env` local**. Use o mesmo valor no ambiente do Render. Não compartilhe esse código com jogadores.
 
-O caminho atual contém acentos. Se o analisador Dart falhar com `FormatException`, use um alias sem acentos. Verifique antes se `R:` já está associado a este projeto com `subst`.
+1. Instale a nova versão do APK.
+2. Cadastre `gustavoluzmachado@gmail.com`. Ao digitar esse e-mail, o formulário mostra **Código de ativação do administrador**.
+3. Preencha com o valor de `ADMIN_SETUP_CODE` e escolha sua senha de login.
+4. Se essa conta já existir no banco, faça login e abra **Configurações → Ativar administrador**, usando o mesmo código.
+5. Vá a **Torneios → CRIAR TORNEIO**.
+6. Informe o nome e escolha 8, 16 ou 32 jogadores; toque em **Publicar**.
+
+As outras contas veem a lista e podem se inscrever, mas não veem o botão de criação. Requisições diretas de contas comuns recebem HTTP 403. Não há torneios de exemplo adicionados pelo servidor. Torneios antigos vazios e sem criador não são exibidos; torneios com participantes não são apagados.
+
+## Gerar APK
+
+O projeto atual tem acentos no caminho. Se o analisador apresentar `FormatException`, confira `subst` e use `R:` associado a esta pasta:
 
 ```powershell
 subst R: "C:\Users\Gustavo\Downloads\Trabalhos\Aplicações\poker"
@@ -59,66 +104,28 @@ flutter test
 flutter build apk --debug --dart-define=SERVER_URL=https://aurora-z5xt.onrender.com
 ```
 
-APK: `build/app/outputs/flutter-apk/app-debug.apk`. Copie para o celular e instale. A identidade Android do projeto anterior foi mantida; a versão subiu para `2.0.0+2`. Este APK é para testes, assinado com a chave de desenvolvimento. Para publicar, configure sua chave de assinatura no Gradle antes de `flutter build appbundle --release`.
+Saída: `build/app/outputs/flutter-apk/app-debug.apk`. O APK distribuído é para testes, assinado com chave de desenvolvimento. Para publicação nas lojas, configure suas chaves de assinatura. iOS está incluído, mas exige macOS/Xcode e assinatura Apple; não foi compilado no Windows.
 
-Se o Gradle reclamar do NDK, no Android Studio abra **SDK Manager → SDK Tools → Show Package Details**, instale a versão solicitada e repita o build. Não é preciso instalar ferramentas C++ do Visual Studio para gerar APK Android.
+## Arquitetura preservada
 
-## iOS
+- `lib/core/app.dart`: sessão e navegação; `lib/screens/`: telas reais.
+- `lib/services/truco_service.dart`: HTTP autenticado, armazenamento seguro e WebSocket.
+- `lib/widgets/truco_widgets.dart` e `br_art.dart`: componentes, logo vetorial, cartas, fichas, feltro e artes.
+- `server/api.py`: mesmas rotas e autoridade sobre usuários, salas, saldos e resultados; nova rota `POST /api/tournaments/create`.
+- `server/database.py`: adaptador MongoDB transacional; SQLite somente para testes isolados quando `TRUCO_STORAGE=sqlite`.
+- `server/engine.py`: Truco 1v1/2v2, cartas privadas, vira, desafios, mão de onze e placar até 12.
+- `server/security.py`: scrypt e tokens aleatórios com hash no banco.
 
-A pasta `ios/` está incluída. O build iOS exige macOS, Xcode e assinatura Apple:
+Mantenha **uma instância/um worker**. O estado persiste no MongoDB, mas a coordenação em tempo real ainda é de um processo. O cluster Atlas precisa suportar transações. Não há fallback silencioso para SQLite se o MongoDB falhar.
 
-```bash
-flutter pub get
-flutter build ios --no-codesign --dart-define=SERVER_URL=https://aurora-z5xt.onrender.com
-```
-
-Abra `ios/Runner.xcworkspace` no Xcode, configure sua equipe e assinatura e gere o Archive. **O build iOS não foi executado no Windows.**
-
-## Testar o multiplayer de verdade
-
-1. Abra o aplicativo em dois dispositivos com a mesma URL de servidor.
-2. Crie contas diferentes, ou entre como convidados diferentes.
-3. Primeiro jogador: Sala privada → 1v1 → Criar sala.
-4. Segundo jogador: digite o código e a senha, se houver.
-5. O anfitrião inicia. Cada um recebe somente suas três cartas. Toque na carta quando for sua vez.
-6. Para 2v2, entre com quatro contas. Assentos 0/2 e 1/3 formam as duplas.
-7. Na partida rápida, selecione a mesma modalidade, regra e entrada; ela inicia automaticamente quando completar jogadores.
-
-Não há preenchimento automático com robôs. Salas vazias permanecem aguardando. Uma ação não respondida por três minutos causa derrota por inatividade. Uma sala aguardando sem atividade fecha após 15 minutos. O estado persiste e permite retomar após reinício do servidor. Não saia da conta durante uma partida: voltar exige a mesma conta; convidados dependem do token salvo no dispositivo.
-
-## Regras implementadas
-
-Paulista, baralho de 40 cartas, três cartas por jogador, melhor de três vazas, objetivo 12 pontos. Ordem natural: 4,5,6,7,Q,J,K,A,2,3. Vira define manilha; naipes das manilhas: ouros < espadas < copas < paus.
-
-Desafios 1 → 3 → 6 → 9 → 12. A dupla adversária aceita, corre ou aumenta; um aumento só é aplicado pelo servidor. Mão de onze permite ver o parceiro e escolher jogar por três ou correr por um; onze a onze usa cartas ocultas. Três empates não dão pontos. Há também **manilha fixa com pontuação paulista** (7♦, A♠, 7♥, 4♣); não é apresentada como regulamento mineiro.
-
-## Fichas, amigos, loja e torneios
-
-- Saldo inicial: 10.250. Entradas rápidas: 100, 500, 1.000, 5.000 e 10.000. Sala privada gratuita.
-- Vencedores recebem duas vezes a entrada +100 por jogador; derrotados perdem a entrada. Cada resultado é liquidado uma única vez em transação.
-- Vitória: 150 XP; derrota: 50 XP; nível a cada 1.000 XP.
-- Bônus diário: 300 fichas. Missão diária: três partidas/300 fichas. Missão semanal: cinco vitórias/1.500 fichas. Períodos em UTC.
-- Amigos reais, pedidos/aceitação/remoção, busca por nome/ID, convites com validade de cinco minutos. Salas com senha continuam exigindo a senha.
-- Ranking: 100 pontos por vitória; semanal usa vitórias da semana ISO em UTC; aba amigos mostra sua rede. Histórico e estatísticas persistidos.
-- Loja com avatares geométricos, molduras, versos, mesas, emotes e efeito de brilho. Passe Aurora custa apenas fichas e concede +100 fichas e 50 XP em cada bônus diário após a compra. Não há pagamento externo.
-- Torneios gratuitos 1v1 de 8/16/32 participantes, começam ao lotar e criam rodadas automaticamente. Campeão ganha tamanho ×250 fichas +1.000 XP. Chave acessível na tela Torneios.
-
-## Organização
-
-`lib/core/app.dart`: sessão, navegação e responsividade. `lib/screens/`: telas. `lib/widgets/truco_widgets.dart`: componentes e arte vetorial própria. `lib/services/truco_service.dart`: HTTP, armazenamento seguro e WebSocket.
-
-`server/engine.py`: regras puras; `server/api.py`: autenticação, salas, amigos, ranking, carteira, loja, torneios e transmissão; `server/security.py`: scrypt/tokens; `server/database.py`: persistência SQLAlchemy/PostgreSQL; `server/server.py`: entrada do processo.
-
-As contas usam senha com sal e scrypt. Tokens aleatórios são guardados como hash no banco e com armazenamento seguro no Android/iOS. Login possui limite de tentativas por IP. O cliente não controla cartas, resultado, pontuação, XP ou saldo. Ações têm versão para impedir repetição de jogadas antigas. Não há login Google nem verificação/recuperação de e-mail implementada.
-
-## Testes e limites de validação
+## Testes
 
 ```powershell
-.\.venv\Scripts\python -m pytest server/test_truco.py -q
+.\.venv\Scripts\python -m pytest server/test_truco.py server/test_admin.py server/test_mongo_adapter.py -q
 flutter analyze
 flutter test
 ```
 
-Testes cobrem partidas completas 1v1/2v2, WebSocket com contas distintas, privacidade da mão, ações antigas, permissões, carteira, loja, amizades, senha da sala, empates, desafios e torneios. Testes de backend usam SQLite isolado; o adaptador PostgreSQL é fornecido, mas precisa ser validado contra o seu banco antes de disponibilizar publicamente. Flutter testa navegação, estados e layouts em retrato/paisagem, com imagens de comparação.
+Os testes de lógica usam SQLite isolado e não modificam seu Atlas. Cobrem partidas completas, torneio até a final, ficha/loja, WebSockets, privacidade e autorização exclusiva de criação. As capturas Flutter usam fixtures; não são jogadores inseridos no banco real.
 
-Este projeto entrega o fluxo jogável e persistente em um servidor único. Operação comercial em larga escala ainda exige teste de carga, moderação/antifraude de contas, recuperação de acesso, política de privacidade própria, backups operacionais e coordenação entre múltiplas instâncias. Nenhum deploy no seu Render ou envio ao GitHub é feito automaticamente por gerar o APK.
+O teste real do Atlas continua bloqueado pela falha de conexão descrita acima. Não houve deploy no Render nem push ao GitHub nesta entrega. Testes de carga, recuperação por e-mail e build iOS continuam fora da validação realizada.

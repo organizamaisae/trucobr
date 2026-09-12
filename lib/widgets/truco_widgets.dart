@@ -1,11 +1,9 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
-const gold = Color(0xFFE9BA63);
-const green = Color(0xFF00BD70);
-const ink = Color(0xFF050F14);
-const panelColor = Color(0xFF0B222B);
+const gold = Color(0xFFFFC332);
+const green = Color(0xFF00984F);
+const ink = Color(0xFF00140F);
+const panelColor = Color(0xFF06272A);
 String number(dynamic n) => (n ?? 0).toString().replaceAllMapped(
   RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
   (m) => '${m[1]}.',
@@ -30,7 +28,7 @@ class TrucoPanel extends StatelessWidget {
         end: Alignment.bottomRight,
         colors: [color ?? panelColor, ink],
       ),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(10),
       border: Border.all(
         color: color == null
             ? const Color(0xFF23434D)
@@ -68,7 +66,9 @@ class GameButton extends StatelessWidget {
       padding: const WidgetStatePropertyAll(
         EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
-      foregroundColor: const WidgetStatePropertyAll(Colors.white),
+      foregroundColor: WidgetStatePropertyAll(
+        color == gold ? ink : Colors.white,
+      ),
       backgroundColor: WidgetStateProperty.resolveWith(
         (s) => s.contains(WidgetState.disabled)
             ? const Color(0xFF263940)
@@ -130,6 +130,18 @@ class PlayerAvatar extends StatelessWidget {
                 : Icons.star,
             color: gold,
             size: size * .55,
+          )
+        : name != '?'
+        ? Padding(
+            padding: const EdgeInsets.all(3),
+            child: ClipOval(
+              child: Image.asset(
+                'assets/images/truco-br-avatar.png',
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+              ),
+            ),
           )
         : Text(
             name.isEmpty ? '?' : name.characters.first.toUpperCase(),
@@ -334,9 +346,9 @@ class TrucoLogo extends StatelessWidget {
         Expanded(
           child: FittedBox(
             child: Text(
-              'TRUCO',
+              'TRUCO BR',
               style: TextStyle(
-                fontFamily: 'RoyalSerif',
+                fontFamily: 'Inter',
                 fontSize: size * .38,
                 height: 1,
                 color: gold,
@@ -356,7 +368,7 @@ class TrucoLogo extends StatelessWidget {
           height: size * .12,
           child: FittedBox(
             child: Text(
-              'A U R O R A  •  O N L I N E',
+              'O JOGO MAIS BRASILEIRO DO BRASIL',
               style: TextStyle(
                 fontSize: size * .072,
                 color: gold,
@@ -379,7 +391,7 @@ class FeltPainter extends CustomPainter {
     final rect = Offset.zero & size;
     final oval = RRect.fromRectAndRadius(
       rect.deflate(7),
-      Radius.circular(math.min(size.width, size.height) * .4),
+      const Radius.circular(30),
     );
     if (glow) {
       canvas.drawRRect(
@@ -390,6 +402,19 @@ class FeltPainter extends CustomPainter {
       );
     }
     canvas.drawRRect(oval, Paint()..color = const Color(0xFF382B1D));
+    for (int i = 1; i < 6; i++) {
+      canvas.drawRRect(
+        oval.deflate(i.toDouble()),
+        Paint()
+          ..color = Color.lerp(
+            const Color(0xFF704322),
+            const Color(0xFF24170E),
+            i / 6,
+          )!
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+    }
     canvas.drawRRect(
       oval.deflate(7),
       Paint()

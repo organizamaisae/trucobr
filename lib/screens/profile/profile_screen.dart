@@ -96,7 +96,7 @@ extension _ProfileScreen on _AuroraAppState {
     ],
   );
   Future<void> editName() async {
-    final input = TextEditingController(text: playerName);
+    final input = profileNameInput..text = playerName;
     final result = await showDialog<String>(
       context: navigator.currentContext!,
       builder: (c) => AlertDialog(
@@ -119,6 +119,5 @@ extension _ProfileScreen on _AuroraAppState {
       ),
     );
     if (result != null) await mutation('profile', {'name': result});
-    input.dispose();
   }
 }

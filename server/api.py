@@ -10,13 +10,21 @@ import contextlib
 from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
-from .database import Base, engine, Session, get, put, all_of
+from .database import Session, get, put, all_of, delete, delete_sessions, initialize
 from . import engine as truco
 from .security import password_hash, verify, digest, session
 
 lock = asyncio.Lock()
 peers = {}
 rates = {}
+ADMIN_EMAIL='gustavoluzmachado@gmail.com'
+
+def can_create(u):
+    return (u.get('email') or '').strip().lower()==ADMIN_EMAIL and u.get('tournament_admin') is True
+
+def valid_admin_code(code):
+    expected=os.getenv('ADMIN_SETUP_CODE','')
+    return bool(expected) and isinstance(code,str) and secrets.compare_digest(code,expected)
 TIERS = [100, 500, 1000, 5000, 10000]
 CATALOG = [dict(id=f'{kind}-{i}', kind=kind, name=name, price=price, icon=icon)
            for kind, names, price, icon in [
@@ -162,7 +170,7 @@ def dashboard(db, u):
     r = active_room(db, u['id'])
     if not r:
         r = next((x for x in reversed(all_of(db, 'room')) if u['id'] in x['players'] and x['status']=='finished'), None)
-    return dict(profile=public(u), chips=u['chips'], earned=u['earned'], spent=u['spent'],
+    return dict(profile=public(u), can_create_tournaments=can_create(u), admin_eligible=(u.get('email') or '').lower()==ADMIN_EMAIL, chips=u['chips'], earned=u['earned'], spent=u['spent'],
                 ledger=list(reversed(u['ledger'][-100:])), history=list(reversed(u['history'][-100:])),
                 daily_available=u['daily'] != d, inventory=u['inventory'], missions=missions,
                 achievements=[dict(name=n, unlocked=u[k] >= v) for n, k, v in [('Primeira vitória', 'wins', 1), ('Dez vitórias', 'wins', 10), ('Invencível: 5 seguidas', 'best', 5), ('Nível 5', 'xp', 4000)]],
@@ -199,7 +207,7 @@ async def maintenance():
 
 @asynccontextmanager
 async def lifespan(app):
-    Base.metadata.create_all(engine)
+    initialize()
     task=asyncio.create_task(maintenance())
     try:
         yield
@@ -209,7 +217,7 @@ async def lifespan(app):
             await task
 
 
-app = FastAPI(title='Aurora Truco', version='2.0.0', lifespan=lifespan)
+app = FastAPI(title='Truco BR', version='3.0.0', lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=os.getenv('CORS_ORIGINS', 'http://localhost:8080').split(','),
                    allow_methods=['GET', 'POST'], allow_headers=['Authorization', 'Content-Type'])
 
@@ -239,7 +247,7 @@ async def validate_body(request, call_next):
 @app.get('/')
 @app.get('/health')
 def health():
-    return dict(status='ok', app='Aurora Truco', version=2)
+    return dict(status='ok', app='Truco BR', version=3)
 
 
 @app.post('/auth/{action}')
@@ -266,6 +274,8 @@ async def auth(action: str, request: Request):
                     fail('Use um e-mail válido e senha de 10 a 128 caracteres.')
                 if action == 'register' and get(db, 'email:'+email):
                     fail('Este e-mail já está cadastrado.')
+                if action=='register' and email==ADMIN_EMAIL and not valid_admin_code(data.get('admin_code')):
+                    fail('Informe o código de ativação do administrador.',403)
                 uid = secrets.token_hex(8)
                 name = str(data.get('name', 'Visitante')).strip()[:24]
                 if len(name) < 2:
@@ -276,6 +286,9 @@ async def auth(action: str, request: Request):
                          history=[], ledger=[dict(amount=10250, reason='Boas-vindas', date=now().isoformat())],
                          daily='', claims=[], inventory=[], equipped={})
                 save_user(db, u)
+                if action=='register' and email==ADMIN_EMAIL:
+                    u['tournament_admin']=True
+                    save_user(db,u)
                 if action == 'register':
                     put(db, 'email:'+email, 'email', dict(id=uid))
             else:
@@ -322,10 +335,14 @@ def dispatch(db, u, path, b, method):
             fail('Jogador não encontrado.', 404)
         return public(other)
     if path == 'logout':
-        for s in list(db.query(__import__('server.database', fromlist=['Record']).Record).filter_by(kind='session')):
-            if s.data['uid'] == uid:
-                db.delete(s)
+        delete_sessions(db,uid)
         return dict(ok=True)
+    if path=='admin/activate':
+        if (u.get('email') or '').lower()!=ADMIN_EMAIL or not valid_admin_code(b.get('admin_code')):
+            fail('Ativação não autorizada.',403)
+        u['tournament_admin']=True
+        save_user(db,u)
+        return dashboard(db,u)
     if path == 'reward':
         claim = b.get('id', 'daily')
         if claim == 'daily':
@@ -385,8 +402,7 @@ def dispatch(db, u, path, b, method):
                 edge['status'] = 'accepted'
                 put(db, key, 'friend', edge)
             elif action == 'remove' and edge:
-                from .database import Record
-                db.delete(db.get(Record, key))
+                delete(db,key)
             else:
                 fail('Pedido inválido ou já enviado.')
         edges = [e for e in all_of(db, 'friend') if uid in [e['a'], e['b']]]
@@ -475,6 +491,16 @@ def dispatch(db, u, path, b, method):
             r['updated'] = time.time()
         put(db, 'room:'+r['code'], 'room', r)
         return room_view(db, r, uid)
+    if path=='tournaments/create':
+        if not can_create(u):
+            fail('Somente o administrador pode criar torneios.',403)
+        size=b.get('size',8)
+        name=str(b.get('name','')).strip()
+        if type(size) is not int or size not in [8,16,32] or not 3<=len(name)<=50:
+            fail('Informe nome de 3 a 50 caracteres e 8, 16 ou 32 jogadores.')
+        tid=secrets.token_hex(5)
+        put(db,'tournament:'+tid,'tournament',dict(id=tid,name=name,size=size,players=[],rounds=[],status='waiting',winner=None,created_by=uid,created_at=now().isoformat()))
+        return dispatch(db,u,'tournaments',{},'GET')
     if path == 'tournaments':
         if method == 'POST':
             tid = str(b.get('id', ''))
@@ -493,13 +519,7 @@ def dispatch(db, u, path, b, method):
                 secrets.SystemRandom().shuffle(t['players'])
                 tournament_round(db,t,t['players'])
             put(db, 'tournament:'+tid,'tournament',t)
-        ts = all_of(db,'tournament')
-        for size in [8,16,32]:
-            if not any(t['size']==size and t['status']=='waiting' for t in ts):
-                tid=secrets.token_hex(5)
-                t=dict(id=tid,size=size,players=[],rounds=[],status='waiting',winner=None)
-                put(db,'tournament:'+tid,'tournament',t)
-                ts.append(t)
+        ts = [t for t in all_of(db,'tournament') if t.get('created_by') or t['status']!='waiting' or t['players']]
         return dict(tournaments=ts[-30:], names={p['id']:p['name'] for p in all_of(db,'user')})
     fail('Rota não encontrada.',404)
 

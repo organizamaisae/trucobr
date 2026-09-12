@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../services/truco_service.dart';
 import '../widgets/truco_widgets.dart';
+import '../widgets/br_art.dart';
 part '../screens/home/home_screen.dart';
 part '../screens/profile/profile_screen.dart';
 part '../screens/private_room/private_room_screen.dart';
@@ -28,6 +29,7 @@ class _AuroraAppState extends State<AuroraApp> {
   String screen = 'home', authMode = 'login', rankingMode = 'global';
   String rule = 'paulista', shopTab = 'avatar';
   int capacity = 2;
+  int privateTab = 0;
   bool busy = false, restoring = true, showPassword = false;
   void refreshUI(VoidCallback callback) {
     if (mounted) setState(callback);
@@ -37,6 +39,9 @@ class _AuroraAppState extends State<AuroraApp> {
   final nameInput = TextEditingController();
   final emailInput = TextEditingController();
   final passwordInput = TextEditingController();
+  final adminCodeInput = TextEditingController();
+  final tournamentNameInput = TextEditingController();
+  final profileNameInput = TextEditingController();
   final roomInput = TextEditingController(text: 'Mesa dos amigos');
   final codeInput = TextEditingController();
   final roomPassword = TextEditingController();
@@ -170,6 +175,9 @@ class _AuroraAppState extends State<AuroraApp> {
       nameInput,
       emailInput,
       passwordInput,
+      adminCodeInput,
+      tournamentNameInput,
+      profileNameInput,
       roomInput,
       codeInput,
       roomPassword,
@@ -182,7 +190,7 @@ class _AuroraAppState extends State<AuroraApp> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'Aurora Truco',
+    title: 'Truco BR',
     debugShowCheckedModeBanner: false,
     scaffoldMessengerKey: messenger,
     navigatorKey: navigator,
@@ -214,14 +222,16 @@ class _AuroraAppState extends State<AuroraApp> {
       builder: (context) {
         if (restoring) {
           return const Scaffold(
-            body: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TrucoLogo(),
-                  SizedBox(height: 24),
-                  CircularProgressIndicator(),
-                ],
+            body: BrBackdrop(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TrucoLogo(),
+                    SizedBox(height: 24),
+                    CircularProgressIndicator(),
+                  ],
+                ),
               ),
             ),
           );
@@ -247,7 +257,7 @@ class _AuroraAppState extends State<AuroraApp> {
                           ),
                     title: Text(
                       {
-                            'home': 'AURORA TRUCO',
+                            'home': 'TRUCO BR',
                             'private': 'Sala privada',
                             'modes': 'Escolha uma mesa',
                             'lobby': 'Sua sala',
@@ -378,117 +388,143 @@ class _AuroraAppState extends State<AuroraApp> {
   );
 
   Widget loginScreen() => Scaffold(
-    body: SafeArea(
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 410),
-            child: Column(
-              children: [
-                const TrucoLogo(size: 180),
-                const SizedBox(height: 24),
-                const Text(
-                  'Amizade, estratégia e uma boa partida.',
-                  style: TextStyle(color: gold),
-                ),
-                const SizedBox(height: 24),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'login', label: Text('Entrar')),
-                    ButtonSegment(
-                      value: 'register',
-                      label: Text('Criar conta'),
+    body: BrBackdrop(
+      child: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 410),
+              child: Column(
+                children: [
+                  const TrucoLogo(size: 180),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Entre no jogo!',
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Jogue com amigos, faça novas amizades\ne mostre que você é bom de Truco!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 24),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'login', label: Text('Entrar')),
+                      ButtonSegment(
+                        value: 'register',
+                        label: Text('Criar conta'),
+                      ),
+                    ],
+                    selected: {authMode},
+                    onSelectionChanged: (v) =>
+                        setState(() => authMode = v.first),
+                  ),
+                  const SizedBox(height: 18),
+                  if (authMode == 'register')
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: TextField(
+                        controller: nameInput,
+                        autofillHints: const [AutofillHints.nickname],
+                        decoration: const InputDecoration(
+                          labelText: 'Nome do jogador',
+                        ),
+                      ),
                     ),
-                  ],
-                  selected: {authMode},
-                  onSelectionChanged: (v) => setState(() => authMode = v.first),
-                ),
-                const SizedBox(height: 18),
-                if (authMode == 'register')
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: TextField(
-                      controller: nameInput,
-                      autofillHints: const [AutofillHints.nickname],
-                      decoration: const InputDecoration(
-                        labelText: 'Nome do jogador',
+                  TextField(
+                    controller: emailInput,
+                    onChanged: (_) => setState(() {}),
+                    keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email],
+                    decoration: const InputDecoration(
+                      labelText: 'E-mail',
+                      prefixIcon: Icon(Icons.mail_outline),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: passwordInput,
+                    obscureText: !showPassword,
+                    autofillHints: const [AutofillHints.password],
+                    decoration: InputDecoration(
+                      labelText: 'Senha',
+                      helperText: authMode == 'register'
+                          ? 'Pelo menos 10 caracteres'
+                          : null,
+                      suffixIcon: IconButton(
+                        onPressed: () =>
+                            setState(() => showPassword = !showPassword),
+                        icon: Icon(
+                          showPassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
                       ),
                     ),
                   ),
-                TextField(
-                  controller: emailInput,
-                  keyboardType: TextInputType.emailAddress,
-                  autofillHints: const [AutofillHints.email],
-                  decoration: const InputDecoration(
-                    labelText: 'E-mail',
-                    prefixIcon: Icon(Icons.mail_outline),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: passwordInput,
-                  obscureText: !showPassword,
-                  autofillHints: const [AutofillHints.password],
-                  decoration: InputDecoration(
-                    labelText: 'Senha',
-                    helperText: authMode == 'register'
-                        ? 'Pelo menos 10 caracteres'
-                        : null,
-                    suffixIcon: IconButton(
-                      onPressed: () =>
-                          setState(() => showPassword = !showPassword),
-                      icon: Icon(
-                        showPassword ? Icons.visibility_off : Icons.visibility,
+                  const SizedBox(height: 20),
+                  if (authMode == 'register' &&
+                      emailInput.text.trim().toLowerCase() ==
+                          'gustavoluzmachado@gmail.com')
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: TextField(
+                        controller: adminCodeInput,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Código de ativação do administrador',
+                        ),
                       ),
                     ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: GameButton(
+                      busy
+                          ? 'Conectando…'
+                          : authMode == 'login'
+                          ? 'ENTRAR'
+                          : 'CRIAR CONTA',
+                      icon: Icons.login,
+                      onPressed: busy
+                          ? null
+                          : () => run(
+                              () => api.login(authMode, {
+                                'email': emailInput.text,
+                                'password': passwordInput.text,
+                                'name': nameInput.text,
+                                'admin_code': adminCodeInput.text,
+                              }),
+                            ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: GameButton(
-                    busy
-                        ? 'Conectando…'
-                        : authMode == 'login'
-                        ? 'ENTRAR'
-                        : 'CRIAR CONTA',
-                    icon: Icons.login,
-                    onPressed: busy
-                        ? null
-                        : () => run(
-                            () => api.login(authMode, {
-                              'email': emailInput.text,
-                              'password': passwordInput.text,
-                              'name': nameInput.text,
-                            }),
-                          ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: GameButton(
+                      'Jogar como convidado',
+                      color: panelColor,
+                      onPressed: busy
+                          ? null
+                          : () => run(
+                              () => api.login('guest', {
+                                'name': nameInput.text.trim().length >= 2
+                                    ? nameInput.text.trim()
+                                    : 'Visitante',
+                              }),
+                            ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: GameButton(
-                    'Jogar como convidado',
-                    color: panelColor,
-                    onPressed: busy
-                        ? null
-                        : () => run(
-                            () => api.login('guest', {
-                              'name': nameInput.text.trim().length >= 2
-                                  ? nameInput.text.trim()
-                                  : 'Visitante',
-                            }),
-                          ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Fichas virtuais para jogar e personalizar. Sem saque ou conversão em dinheiro.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
                   ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Fichas virtuais para jogar e personalizar. Sem saque ou conversão em dinheiro.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

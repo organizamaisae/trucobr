@@ -48,49 +48,15 @@ extension _HomeScreen on _AuroraAppState {
         ],
       ),
       const SizedBox(height: 20),
-      TrucoPanel(
-        color: const Color(0xFF4D3519),
-        child: Row(
-          children: [
-            const Icon(Icons.workspace_premium, color: gold, size: 48),
-            const SizedBox(width: 14),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'TEMPORADA AURORA',
-                    style: TextStyle(color: gold, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    'Sua próxima grande jogada começa aqui.',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            TextButton(
-              onPressed: () => go('shop'),
-              child: const Text('VER PASSE', style: TextStyle(color: gold)),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 20),
-      SizedBox(
-        height: 175,
-        child: CustomPaint(
-          painter: FeltPainter(purple: equipped['table'] == 'table-1'),
-          child: const Center(child: TrucoLogo(size: 112)),
-        ),
-      ),
-      const SizedBox(height: 20),
+      const BrBanner(),
+      const SizedBox(height: 16),
       Row(
         children: [
           Expanded(
             child: GameButton(
               'JOGAR',
               icon: Icons.play_arrow,
+              color: gold,
               onPressed: () => go('modes'),
             ),
           ),
@@ -99,7 +65,7 @@ extension _HomeScreen on _AuroraAppState {
             child: GameButton(
               'SALA PRIVADA',
               icon: Icons.lock_outline,
-              color: const Color(0xFF0064CB),
+              color: green,
               onPressed: () => go('private'),
             ),
           ),

@@ -1,6 +1,86 @@
 part of '../core/app.dart';
 
 extension _CommunityScreens on _AuroraAppState {
+  Future<void> createTournament() async {
+    final input = tournamentNameInput..clear();
+    int size = 8;
+    final result = await showDialog<Map<String, dynamic>>(
+      context: navigator.currentContext!,
+      builder: (c) => StatefulBuilder(
+        builder: (c, update) => AlertDialog(
+          title: const Text('Criar torneio'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: input,
+                maxLength: 50,
+                decoration: const InputDecoration(labelText: 'Nome do torneio'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: size,
+                decoration: const InputDecoration(labelText: 'Jogadores'),
+                items: [
+                  for (final n in [8, 16, 32])
+                    DropdownMenuItem(value: n, child: Text('$n jogadores')),
+                ],
+                onChanged: (v) => update(() => size = v!),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Inscrição gratuita. Inicia quando completar os jogadores. Recompensas exclusivamente virtuais.',
+                style: TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(c, {'name': input.text.trim(), 'size': size}),
+              child: const Text('Publicar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result != null) {
+      await mutation('tournaments/create', result, reload: true);
+    }
+  }
+
+  Future<void> activateAdmin() async {
+    final input = adminCodeInput..clear();
+    final code = await showDialog<String>(
+      context: navigator.currentContext!,
+      builder: (c) => AlertDialog(
+        title: const Text('Ativar administrador'),
+        content: TextField(
+          controller: input,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'Código privado de ativação',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c, input.text),
+            child: const Text('Ativar'),
+          ),
+        ],
+      ),
+    );
+    if (code != null) await mutation('admin/activate', {'admin_code': code});
+  }
+
   Widget walletScreen() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -374,6 +454,24 @@ extension _CommunityScreens on _AuroraAppState {
   Widget tournamentsScreen() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      if (api.data['can_create_tournaments'] == true)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: GameButton(
+            'CRIAR TORNEIO',
+            icon: Icons.add,
+            color: gold,
+            onPressed: busy ? null : createTournament,
+          ),
+        ),
+      if (!busy && (extra['tournaments'] as List? ?? []).isEmpty)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: empty(
+            'Nenhum torneio publicado. Quando o administrador criar um evento, ele aparecerá aqui.',
+            Icons.emoji_events_outlined,
+          ),
+        ),
       const Text(
         'Mata-mata 1v1 • inscrições gratuitas\nInício automático com 8, 16 ou 32 jogadores reais.',
         style: TextStyle(color: Colors.white60),
@@ -395,7 +493,7 @@ extension _CommunityScreens on _AuroraAppState {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Torneio de ${t['size']} jogadores',
+                            '${t['name'] ?? 'Torneio'} • ${t['size']} jogadores',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           Text(
@@ -484,6 +582,13 @@ extension _CommunityScreens on _AuroraAppState {
   Widget settingsScreen() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      if (api.data['admin_eligible'] == true &&
+          api.data['can_create_tournaments'] != true)
+        GameButton(
+          'ATIVAR ADMINISTRADOR',
+          icon: Icons.admin_panel_settings,
+          onPressed: activateAdmin,
+        ),
       TrucoPanel(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -523,7 +628,7 @@ extension _CommunityScreens on _AuroraAppState {
       ),
       const ListTile(
         leading: Icon(Icons.info_outline),
-        title: Text('Aurora Truco 2.0'),
+        title: Text('Truco BR 2.0'),
         subtitle: Text('Arte original desenhada no aplicativo.'),
       ),
       GameButton(
