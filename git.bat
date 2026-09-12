@@ -25,8 +25,8 @@ if errorlevel 1 (
 
 git.exe diff --cached --quiet
 if not errorlevel 1 (
-  echo Nenhuma alteracao nova para enviar.
-  exit /b 0
+  echo Nenhuma alteracao nova; continuando para o push de commits locais.
+  goto push_commit
 )
 
 echo [3/4] Criando commit: %COMMIT_MESSAGE%
@@ -37,6 +37,7 @@ if errorlevel 1 (
 )
 
 echo [4/4] Enviando para origin/main...
+:push_commit
 git.exe push origin main
 if errorlevel 1 (
   echo ERRO: o envio falhou. Confira login, permissao e remote origin.
