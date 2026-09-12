@@ -655,6 +655,14 @@ def dispatch(db, u, path, b, method):
             t = get(db, 'tournament:'+tid)
             if not t:
                 fail('Torneio não encontrado.')
+            if b.get('action') == 'delete':
+                if not can_create(u) or t.get('created_by') != uid:
+                    fail('Somente o criador administrador pode excluir este torneio.', 403)
+                if t.get('status') == 'playing':
+                    fail('Não é possível excluir um torneio em andamento.')
+                delete(db, 'tournament:'+tid)
+                ts = [x for x in all_of(db,'tournament') if x.get('created_by') or x['status']!='waiting' or x['players']]
+                return dict(tournaments=[tournament_view(x,uid) for x in ts[-30:]], names={p['id']:p['name'] for p in all_of(db,'user')})
             if any(uid in x['players'] and x['status'] in ['waiting','playing'] and x['id'] != tid for x in all_of(db,'tournament')):
                 fail('Conclua sua sala ou torneio atual.')
             if t['status'] != 'waiting':

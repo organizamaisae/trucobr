@@ -366,6 +366,32 @@ extension _Tournaments on _AuroraAppState {
     }
   }
 
+  Future<void> deleteTournament(Map<String, dynamic> t) async {
+    final confirmed = await showDialog<bool>(
+      context: navigator.currentContext!,
+      builder: (context) => AlertDialog(
+        title: const Text('Excluir torneio?'),
+        content: Text(
+          'O torneio "${t['name']}" será removido da lista. As inscrições serão encerradas.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCELAR'),
+          ),
+          GameButton(
+            'EXCLUIR',
+            color: Colors.redAccent,
+            onPressed: () => Navigator.pop(context, true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await mutation('tournaments', {'id': t['id'], 'action': 'delete'}, reload: true);
+    if (mounted) message('Torneio excluído.');
+  }
+
   Future<void> showChampion(Map<String, dynamic> t) => showDialog<void>(
     context: navigator.currentContext!,
     builder: (context) => AlertDialog(
@@ -701,6 +727,14 @@ extension _Tournaments on _AuroraAppState {
                     ],
                   ),
                 ),
+                if (api.data['can_create_tournaments'] == true &&
+                    t['created_by'] == uid &&
+                    !playing)
+                  IconButton(
+                    tooltip: 'Excluir torneio',
+                    onPressed: busy ? null : () => deleteTournament(t),
+                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  ),
               ],
             ),
             if ((t['unpaired'] as List? ?? []).contains(uid))

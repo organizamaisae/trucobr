@@ -19,3 +19,9 @@ def test_tournaments_require_server_permission(client):
     assert len(created['tournaments'])==1
     assert created['tournaments'][0]['players']==[]
     assert len(client.get('/api/tournaments',headers=h).json()['tournaments'])==1
+
+    tournament_id = created['created']['id']
+    deleted = client.post('/api/tournaments', headers=admin,
+                          json={'id': tournament_id, 'action': 'delete'})
+    assert deleted.status_code == 200
+    assert deleted.json()['tournaments'] == []
