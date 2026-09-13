@@ -9,7 +9,7 @@ import time
 import contextlib
 from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, HTMLResponse
 from .database import Session, get, put, all_of, delete, delete_sessions, initialize
 from . import engine as truco
 from .security import password_hash, verify, digest, session
@@ -414,7 +414,12 @@ def health():
 async def admin_game_config(request: Request):
     """Small admin panel API; the Flutter client or a browser can use this route."""
     if request.method == 'GET':
-        return dict(app='Truco BR', login='POST /admgameconfig', actions=['add_item', 'grant_chips', 'announce'])
+        return HTMLResponse('''<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width"><title>Truco BR • Administração</title>
+<style>body{font:16px system-ui;background:#06251b;color:#fff;max-width:620px;margin:30px auto;padding:20px}input,select,button{padding:12px;margin:5px;border-radius:8px;border:1px solid #c9a227}button{background:#0a9f62;color:#fff;font-weight:bold}section{background:#0d3a2a;padding:16px;border-radius:12px;margin:15px 0}</style>
+<h1>Truco BR — Administração</h1><section><h2>Login</h2><input id="email" placeholder="E-mail"><input id="password" type="password" placeholder="Senha"><button onclick="login()">Entrar</button></section>
+<section><h2>Novo item da loja</h2><input id="name" placeholder="Nome"><select id="kind"><option>avatar</option><option>frame</option><option>back</option><option>table</option><option>emote</option><option>effect</option></select><input id="price" type="number" placeholder="Preço em fichas"><button onclick="addItem()">Criar item</button></section>
+<section><h2>Dar fichas</h2><input id="user" placeholder="ID ou e-mail"><input id="amount" type="number" placeholder="Quantidade (pode ser negativa)"><button onclick="grant()">Aplicar</button></section><p id="msg"></p>
+<script>let token='';const msg=x=>document.getElementById('msg').textContent=x;async function post(u,b){let r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});let j=await r.json();if(!r.ok)throw Error(j.detail||'Erro');return j}async function login(){try{token=(await post('/admgameconfig',{email:email.value,password:password.value})).token;msg('Login autorizado.')}catch(e){msg(e.message)}}async function addItem(){try{await post('/admgameconfig/action',{admin_token:token,action:'add_item',name:name.value,kind:kind.value,price:Number(price.value)});msg('Item criado.')}catch(e){msg(e.message)}}async function grant(){try{await post('/admgameconfig/action',{admin_token:token,action:'grant_chips',user_id:user.value,amount:Number(amount.value)});msg('Saldo atualizado.')}catch(e){msg(e.message)}}</script></html>''')
     body = await request.json()
     if body.get('email', '').strip().lower() == ADMIN_EMAIL and str(body.get('password', '')) == ADMIN_PANEL_PASSWORD:
         token = secrets.token_urlsafe(32)
