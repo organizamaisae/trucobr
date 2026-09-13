@@ -11,10 +11,16 @@ if __name__ == '__main__':
     parser.add_argument('--host', default='0.0.0.0')
     from dotenv import load_dotenv
     load_dotenv(Path(__file__).resolve().parent.parent / '.env')
-    try:
-        default_port = int(os.getenv('PORT') or 8080)
-    except ValueError:
-        default_port = 8080
-    parser.add_argument('--port', type=int, default=default_port)
+    # Railway injects PORT at runtime. Keep accepting the old Render-style
+    # ``--port $PORT`` command if it remains configured on an existing service:
+    # argparse receives ``$PORT`` literally there, so resolve it from env.
+    parser.add_argument('--port', default=None)
     args = parser.parse_args()
-    uvicorn.run('server.api:app', host=args.host, port=args.port, workers=1)
+    raw_port = args.port
+    if raw_port is None or raw_port == '$PORT':
+        raw_port = os.getenv('PORT')
+    try:
+        port = int(raw_port or 8080)
+    except (TypeError, ValueError):
+        port = 8080
+    uvicorn.run('server.api:app', host=args.host, port=port, workers=1)
