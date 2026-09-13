@@ -22,7 +22,7 @@ MONGODB_URI=COLE_AQUI_SUA_URI_COMPLETA
 MONGODB_DB=quizeid
 ADMIN_SETUP_CODE=SEU_CODIGO_PRIVADO_DE_ATIVACAO
 TRUCO_STORAGE=mongo
-PORT=5000
+PORT=8080
 ```
 
 O `.env` é carregado automaticamente; variáveis do ambiente têm prioridade. O ZIP traz apenas `.env.example`, sem credenciais. Dados do antigo PostgreSQL/SQLite **não são migrados automaticamente** para o MongoDB.
@@ -56,7 +56,7 @@ python -m venv .venv
 .\.venv\Scripts\python server/server.py
 ```
 
-Porta padrão **5000**. Saúde: `http://127.0.0.1:5000/health`; documentação: `/docs`; WebSocket: `/ws`.
+Porta padrão **8080** quando `PORT` não está definida. Saúde: `http://127.0.0.1:8080/health`; documentação: `/docs`; WebSocket: `/ws`.
 
 Com Docker, configure `.env` e execute `docker compose up --build`. O container conecta ao Atlas informado, não cria outro banco.
 
@@ -78,6 +78,29 @@ Resposta esperada em `https://aurora-z5xt.onrender.com/health`:
 ```json
 {"status":"ok","app":"Truco BR","version":3}
 ```
+
+## Deploy no Railway com Docker
+
+O Dockerfile inicia diretamente `/app/server/server.py`. O servidor escuta em `0.0.0.0` e usa a variável `PORT` fornecida pelo Railway, com fallback local `8080`. Não preencha uma porta fixa no Start Command se quiser usar o `CMD` do Dockerfile; se o painel exigir um comando, use:
+
+```text
+python /app/server/server.py
+```
+
+O arquivo `railway.toml` configura o healthcheck como `/health`. Depois de conectar o repositório, faça um novo deploy e aguarde o healthcheck. A resposta esperada é `HTTP 200` com `{"status":"ok","app":"Truco BR","version":3}`.
+
+Cadastre no serviço Railway estas variáveis:
+
+```dotenv
+MONGODB_URI= sua URI completa do MongoDB Atlas
+MONGODB_DB=quizeid
+TRUCO_STORAGE=mongo
+ADMIN_SETUP_CODE=seu código privado de ativação
+CORS_ORIGINS=https://seu-dominio-do-app.example
+PORT= (não cadastre manualmente; o Railway injeta esta variável)
+```
+
+`DATABASE_URL` só é usado nos testes com SQLite e não deve ser usado no serviço MongoDB. `PYTHON_VERSION` não é necessário no Dockerfile, pois a imagem já fixa Python 3.13. Se o MongoDB Atlas restringir IPs, permita as conexões de saída do Railway ou use a política de rede adequada no seu projeto Atlas.
 
 ## Ativar seu administrador e criar torneios
 
