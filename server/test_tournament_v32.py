@@ -73,7 +73,7 @@ def test_create_broadcast_and_catalog_purchase(client):
         created=post(client,ha,'tournaments/create',name='Novo evento',size=8,starts_at=(datetime.now(timezone.utc)+timedelta(hours=1)).isoformat())['created']
         assert ws.receive_json()['data']['tournaments'][0]['id']==created['id']
     items=client.get('/api/shop',headers=ah).json()['items']
-    assert len([i for i in items if i['kind']=='avatar'])==9
+        assert len([i for i in items if i['kind']=='avatar'])==13
     post(client,ah,'shop',id='avatar-8')
     post(client,ah,'shop',id='avatar-8',equip=True)
     assert client.get('/api/me',headers=ah).json()['profile']['equipped']['avatar']=='avatar-8'

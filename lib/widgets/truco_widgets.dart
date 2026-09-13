@@ -138,7 +138,7 @@ class PlayerAvatar extends StatelessWidget {
             child: CharacterPortrait(
               index: ((int.tryParse(cosmetic!.split('-').last) ?? 3) - 3).clamp(
                 0,
-                5,
+                9,
               ),
               size: size - 10,
             ),

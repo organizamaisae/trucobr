@@ -47,8 +47,12 @@ CATALOG += [dict(id=f'emote-{i+2}',kind='emote',name=name,price=250+i*100,icon='
             for i,name in enumerate(['É truco!','Boa dupla!','Respeita a mesa!','Até a próxima!'])]
 CATALOG += [dict(id='table-5',kind='table',name='Quiosque da Praia',price=1800,icon='table'),
             dict(id='table-6',kind='table',name='Taverna da Serra',price=2200,icon='table')]
+CATALOG += [dict(id=f'table-{i+7}',kind='table',name=name,price=price,icon='table')
+            for i,(name,price) in enumerate([('Varanda da Roça',2400),('Boteco dos Azulejos',2600),('Refúgio Amazônico',2800)])]
+CATALOG += [dict(id=f'avatar-{i+9}',kind='avatar',name=name,price=price,icon='person')
+            for i,(name,price) in enumerate([('Dona Rosa',1500),('Zé da Roça',1600),('Ará',1700),('Diego',1800)])]
 CATALOG = [x for x in CATALOG if x['kind']!='pass']
-TABLES = ['table-0','table-1','table-2','table-3','table-4','table-5','table-6']
+TABLES = ['table-0','table-1','table-2','table-3','table-4','table-5','table-6','table-7','table-8','table-9']
 
 def monthly_pass(u):
     month=now().strftime('%Y-%m')
