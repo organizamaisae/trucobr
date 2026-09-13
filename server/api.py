@@ -18,6 +18,8 @@ lock = asyncio.Lock()
 peers = {}
 rates = {}
 ADMIN_EMAIL='gustavoluzmachado@gmail.com'
+ADMIN_PANEL_PASSWORD = os.getenv('ADMIN_PANEL_PASSWORD', '1234')
+admin_panel_tokens = set()
 
 
 def can_create(u):
@@ -53,6 +55,12 @@ CATALOG += [dict(id=f'avatar-{i+9}',kind='avatar',name=name,price=price,icon='pe
             for i,(name,price) in enumerate([('Dona Rosa',1500),('Zé da Roça',1600),('Ará',1700),('Diego',1800)])]
 CATALOG = [x for x in CATALOG if x['kind']!='pass']
 TABLES = ['table-0','table-1','table-2','table-3','table-4','table-5','table-6','table-7','table-8','table-9']
+
+def catalog(db=None):
+    """Built-in shop plus administrator-created items persisted in the database."""
+    extra = all_of(db, 'shop_item') if db is not None else []
+    known = {x['id'] for x in CATALOG}
+    return CATALOG + [x for x in extra if x.get('id') not in known]
 
 def monthly_pass(u):
     month=now().strftime('%Y-%m')
@@ -402,6 +410,55 @@ def health():
     return dict(status='ok', app='Truco BR', version=3)
 
 
+@app.api_route('/admgameconfig', methods=['GET', 'POST'])
+async def admin_game_config(request: Request):
+    """Small admin panel API; the Flutter client or a browser can use this route."""
+    if request.method == 'GET':
+        return dict(app='Truco BR', login='POST /admgameconfig', actions=['add_item', 'grant_chips', 'announce'])
+    body = await request.json()
+    if body.get('email', '').strip().lower() == ADMIN_EMAIL and str(body.get('password', '')) == ADMIN_PANEL_PASSWORD:
+        token = secrets.token_urlsafe(32)
+        admin_panel_tokens.add(token)
+        return dict(ok=True, token=token, message='Acesso administrativo autorizado.')
+    fail('E-mail ou senha de administrador incorretos.', 401)
+
+
+@app.post('/admgameconfig/action')
+async def admin_game_config_action(request: Request):
+    body = await request.json()
+    if body.get('admin_token') not in admin_panel_tokens:
+        fail('Faça login na área administrativa.', 401)
+    action = body.get('action')
+    async with lock:
+        with Session.begin() as db:
+            if action == 'add_item':
+                kind = str(body.get('kind', '')).strip().lower()
+                name = str(body.get('name', '')).strip()[:60]
+                price = int(body.get('price', 0))
+                if kind not in {'avatar', 'frame', 'back', 'table', 'emote', 'effect'} or not name or price < 0:
+                    fail('Item inválido. Use tipo, nome e preço válidos.')
+                item = dict(id='custom-'+secrets.token_hex(6), kind=kind, name=name, price=price, icon=kind)
+                put(db, 'shop_item:'+item['id'], 'shop_item', item)
+                return dict(ok=True, item=item, items=catalog(db))
+            if action == 'grant_chips':
+                target = str(body.get('user_id') or body.get('email') or '').strip().lower()
+                amount = int(body.get('amount', 0))
+                users = all_of(db, 'user')
+                target_user = next((x for x in users if x['id'] == target or (x.get('email') or '').lower() == target), None)
+                if not target_user or amount == 0:
+                    fail('Jogador ou quantidade inválida.')
+                ledger(target_user, amount, str(body.get('reason') or 'Ajuste administrativo'))
+                save_user(db, target_user)
+                return dict(ok=True, user=public(target_user), chips=target_user['chips'])
+            if action == 'announce':
+                text = str(body.get('text', '')).strip()[:240]
+                if not text:
+                    fail('Informe um aviso.')
+                put(db, 'config:announcement', 'config', dict(text=text, date=now().isoformat()))
+                return dict(ok=True, announcement=text)
+            fail('Ação administrativa desconhecida.', 400)
+
+
 @app.post('/auth/{action}')
 async def auth(action: str, request: Request):
     data = await request.json()
@@ -531,7 +588,8 @@ def dispatch(db, u, path, b, method):
         return dashboard(db,u)
     if path == 'shop':
         if method == 'POST':
-            item = next((x for x in CATALOG if x['id'] == b.get('id')), None)
+            items = catalog(db)
+            item = next((x for x in items if x['id'] == b.get('id')), None)
             if not item:
                 fail('Item inválido.')
             if b.get('equip'):
@@ -542,7 +600,7 @@ def dispatch(db, u, path, b, method):
                 ledger(u, -item['price'], 'Loja: '+item['name'])
                 u['inventory'].append(item['id'])
             save_user(db, u)
-        return dict(items=CATALOG, inventory=u['inventory'], equipped=u['equipped'])
+        return dict(items=catalog(db), inventory=u['inventory'], equipped=u['equipped'])
     if path == 'ranking':
         users = all_of(db, 'user')
         mode = b.get('mode', 'global')
@@ -676,7 +734,7 @@ def dispatch(db, u, path, b, method):
                 fail('Escolha um emote na loja.')
             if time.time()-r.get('emote_at',0)<3:
                 fail('Aguarde para enviar outro emote.')
-            item=next(x for x in CATALOG if x['id']==u['equipped']['emote'])
+            item=next(x for x in catalog(db) if x['id']==u['equipped']['emote'])
             r['emote']=dict(name=u['name'],text=item['name'])
             r['emote_at']=time.time()
         if action not in ['state','emote']:

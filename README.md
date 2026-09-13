@@ -79,29 +79,6 @@ Resposta esperada em `https://aurora-z5xt.onrender.com/health`:
 {"status":"ok","app":"Truco BR","version":3}
 ```
 
-## Deploy no Railway com Docker
-
-O Dockerfile inicia diretamente `/app/server/server.py`. O servidor escuta em `0.0.0.0` e usa a variável `PORT` fornecida pelo Railway, com fallback local `8080`. Não preencha uma porta fixa no Start Command se quiser usar o `CMD` do Dockerfile; se o painel exigir um comando, use:
-
-```text
-python /app/server/server.py
-```
-
-O arquivo `railway.toml` configura o healthcheck como `/health`. Depois de conectar o repositório, faça um novo deploy e aguarde o healthcheck. A resposta esperada é `HTTP 200` com `{"status":"ok","app":"Truco BR","version":3}`.
-
-Cadastre no serviço Railway estas variáveis:
-
-```dotenv
-MONGODB_URI= sua URI completa do MongoDB Atlas
-MONGODB_DB=quizeid
-TRUCO_STORAGE=mongo
-ADMIN_SETUP_CODE=seu código privado de ativação
-CORS_ORIGINS=https://seu-dominio-do-app.example
-PORT= (não cadastre manualmente; o Railway injeta esta variável)
-```
-
-`DATABASE_URL` só é usado nos testes com SQLite e não deve ser usado no serviço MongoDB. `PYTHON_VERSION` não é necessário no Dockerfile, pois a imagem já fixa Python 3.13. Se o MongoDB Atlas restringir IPs, permita as conexões de saída do Railway ou use a política de rede adequada no seu projeto Atlas.
-
 ## Ativar seu administrador e criar torneios
 
 O código de ativação impede que alguém ganhe acesso administrativo simplesmente cadastrando seu e-mail. O valor foi gerado em **`ADMIN_SETUP_CODE` no `.env` local**. Use o mesmo valor no ambiente do Render. Não compartilhe esse código com jogadores.
