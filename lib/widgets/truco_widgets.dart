@@ -159,6 +159,9 @@ class PlayerAvatar extends StatelessWidget {
             child: ClipOval(
               child: Image.asset(
                 'assets/images/truco-br-avatar.png',
+                cacheWidth: (size * MediaQuery.devicePixelRatioOf(context))
+                    .round()
+                    .clamp(1, 512),
                 width: size,
                 height: size,
                 fit: BoxFit.cover,
@@ -346,7 +349,10 @@ class TrucoLogo extends StatelessWidget {
     child: Image.asset(
       'assets/images/truco-br-login-logo.png',
       fit: BoxFit.contain,
-      filterQuality: FilterQuality.high,
+      cacheWidth: (size * 1.6 * MediaQuery.devicePixelRatioOf(context))
+          .round()
+          .clamp(1, 1536),
+      filterQuality: FilterQuality.medium,
     ),
   );
 }

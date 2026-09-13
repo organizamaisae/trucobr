@@ -143,8 +143,10 @@ extension _CommunityScreens on _AuroraAppState {
                 PlayerAvatar(
                   p['name'],
                   size: 36,
-                  cosmetic: (p['equipped'] as Map?)?['avatar']?.toString(),
-                  frame: (p['equipped'] as Map?)?['frame']?.toString(),
+                  cosmetic: ((p['visuals'] ?? p['equipped']) as Map?)?['avatar']
+                      ?.toString(),
+                  frame: ((p['visuals'] ?? p['equipped']) as Map?)?['frame']
+                      ?.toString(),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -404,21 +406,27 @@ extension _CommunityScreens on _AuroraAppState {
                         'avatar' => PlayerAvatar(
                           item['name'],
                           size: 72,
-                          cosmetic: item['id'],
+                          cosmetic: item['visual_id'] ?? item['id'],
                         ),
-                        'back' => TrucoCard('?', width: 48, back: item['id']),
+                        'back' => TrucoCard(
+                          '?',
+                          width: 48,
+                          back: item['visual_id'] ?? item['id'],
+                        ),
                         'table' => SizedBox(
                           width: 110,
                           height: 70,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(10),
-                            child: BarTable(table: item['id']),
+                            child: BarTable(
+                              table: item['visual_id'] ?? item['id'],
+                            ),
                           ),
                         ),
                         'frame' => PlayerAvatar(
                           playerName,
                           size: 68,
-                          frame: item['id'],
+                          frame: item['visual_id'] ?? item['id'],
                         ),
                         _ => Icon(
                           shopTab == 'frame'

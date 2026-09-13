@@ -23,12 +23,22 @@ class Record(Base):
     data: Mapped[dict] = mapped_column(JSON)
 
 
-def get(db, key):
+def _get(db, key):
     if isinstance(db, MongoUnit):
         row = db.collection.find_one({'_id':key},session=db.session)
         return row['data'] if row else None
     row = db.get(Record, key)
     return row.data if row else None
+
+
+def get(db, key):
+    if not getattr(db, 'cache_reads', False):
+        return _get(db, key)
+    if not hasattr(db, 'key_cache'):
+        db.key_cache = {}
+    if key not in db.key_cache:
+        db.key_cache[key] = _get(db, key)
+    return db.key_cache[key]
 
 
 def put(db, key, kind, data):
@@ -45,10 +55,20 @@ def put(db, key, kind, data):
     db.flush()
 
 
-def all_of(db, kind):
+def _all_of(db, kind):
     if isinstance(db, MongoUnit):
         return [r['data'] for r in db.collection.find({'kind':kind},session=db.session)]
     return [r.data for r in db.scalars(select(Record).where(Record.kind == kind))]
+
+
+def all_of(db, kind):
+    if not getattr(db, 'cache_reads', False):
+        return _all_of(db, kind)
+    if not hasattr(db, 'read_cache'):
+        db.read_cache = {}
+    if kind not in db.read_cache:
+        db.read_cache[kind] = _all_of(db, kind)
+    return db.read_cache[kind]
 
 
 def delete(db,key):
@@ -104,5 +124,41 @@ def initialize():
     if STORAGE=='mongo':
         mongo_client.admin.command('ping')
         mongo_collection.create_index('kind')
+        mongo_collection.create_index([('kind',1),('data.status',1),('data.players',1),('data.updated',-1)])
     else:
         Base.metadata.create_all(engine)
+
+
+def rooms_for_user(db, uid, statuses, limit=1):
+    """Fetch only matching rooms instead of scanning the entire match archive."""
+    if isinstance(db, MongoUnit):
+        cursor = db.collection.find({'kind':'room','data.players':uid,'data.status':{'$in':statuses}},session=db.session)
+        return [r['data'] for r in cursor.sort('data.updated',-1).limit(limit)]
+    query = select(Record).where(Record.kind=='room',Record.data['status'].as_string().in_(statuses),
+                                 Record.data['players'].contains(uid)).order_by(Record.data['updated'].as_float().desc()).limit(limit)
+    return [r.data for r in db.scalars(query)]
+
+
+def live_rooms(db):
+    if isinstance(db, MongoUnit):
+        return [r['data'] for r in db.collection.find({'kind':'room','data.status':{'$in':['waiting','playing']}},session=db.session)]
+    return [r.data for r in db.scalars(select(Record).where(Record.kind=='room',
+                    Record.data['status'].as_string().in_(['waiting','playing'])))]
+
+
+def user_page(db, query, offset, limit=25):
+    if isinstance(db, MongoUnit):
+        import re
+        where = {'kind':'user'}
+        if query:
+            where['$or'] = [{'data.'+k:{'$regex':re.escape(query),'$options':'i'}} for k in ['name','id','email']]
+        total = db.collection.count_documents(where,session=db.session)
+        rows = db.collection.find(where,session=db.session).sort('data.id',1).skip(offset).limit(limit)
+        return [r['data'] for r in rows], total
+    from sqlalchemy import func, or_
+    conditions = [Record.kind=='user']
+    if query:
+        conditions.append(or_(*(func.lower(Record.data[k].as_string()).contains(query,autoescape=True) for k in ['name','id','email'])))
+    total = db.scalar(select(func.count()).select_from(Record).where(*conditions))
+    rows = db.scalars(select(Record).where(*conditions).order_by(Record.key).offset(offset).limit(limit))
+    return [r.data for r in rows], total

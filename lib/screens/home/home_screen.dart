@@ -8,8 +8,8 @@ extension _HomeScreen on _AuroraAppState {
         children: [
           PlayerAvatar(
             playerName,
-            cosmetic: equipped['avatar'],
-            frame: equipped['frame'],
+            cosmetic: visuals['avatar'],
+            frame: visuals['frame'],
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -116,7 +116,8 @@ extension _HomeScreen on _AuroraAppState {
         trailing: const Icon(Icons.chevron_right),
         onTap: () => go('missions'),
       ),
-      if (api.data['room'] != null)
+      if (room['tournament'] == null &&
+          ['waiting', 'playing'].contains(room['status']))
         Padding(
           padding: const EdgeInsets.only(top: 16),
           child: GameButton(

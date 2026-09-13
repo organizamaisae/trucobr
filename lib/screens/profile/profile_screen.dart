@@ -10,8 +10,8 @@ extension _ProfileScreen on _AuroraAppState {
             PlayerAvatar(
               playerName,
               size: 82,
-              cosmetic: equipped['avatar'],
-              frame: equipped['frame'],
+              cosmetic: visuals['avatar'],
+              frame: visuals['frame'],
             ),
             const SizedBox(width: 20),
             Expanded(

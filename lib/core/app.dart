@@ -46,11 +46,14 @@ class _AuroraAppState extends State<AuroraApp> {
   String promptedTournamentRoom = '';
   Timer? turnTimer;
   final Set<String> hiddenInvites = {};
+  bool pageLoading = false;
   bool busy = false, restoring = true, showPassword = false;
   void refreshUI(VoidCallback callback) {
     if (mounted) setState(callback);
   }
 
+  final Map<String, Map<String, dynamic>> _pageCache = {};
+  final Map<String, DateTime> _pageLoaded = {};
   Map<String, dynamic> extra = {}, room = {};
   final nameInput = TextEditingController();
   final emailInput = TextEditingController();
@@ -66,6 +69,8 @@ class _AuroraAppState extends State<AuroraApp> {
       Map<String, dynamic>.from(api.data['profile'] as Map? ?? {});
   Map<String, dynamic> get equipped =>
       Map<String, dynamic>.from(me['equipped'] as Map? ?? {});
+  Map<String, dynamic> get visuals =>
+      Map<String, dynamic>.from(me['visuals'] as Map? ?? equipped);
   String get uid => me['id'] as String? ?? '';
   String get playerName => me['name'] as String? ?? 'Jogador';
   @override
@@ -119,6 +124,7 @@ class _AuroraAppState extends State<AuroraApp> {
           'names': api.data['tournament_names'] ?? {},
         };
       }
+      if (incoming == null) room = {};
       if (incoming is Map) {
         final started =
             room['status'] != 'playing' || room['code'] != incoming['code'];
@@ -198,18 +204,32 @@ class _AuroraAppState extends State<AuroraApp> {
   Future<void> go(String target) async {
     if (target != 'match') api.stopSpectating();
     orient(target == 'match');
+    final key = '$uid/$target/$rankingMode';
     setState(() {
       screen = target;
-      extra = {};
+      pageLoading = false;
+      extra = _pageCache[key] ?? {};
     });
     if (['friends', 'ranking', 'shop', 'tournaments'].contains(target)) {
-      await run(() async {
+      final loaded = _pageLoaded[key];
+      if (loaded != null && DateTime.now().difference(loaded).inSeconds < 5) {
+        return;
+      }
+      setState(() => pageLoading = true);
+      // Navigation requests must not be discarded while another operation is busy.
+      try {
         final result = await api.request(
           'api/$target${target == 'ranking' ? '?mode=$rankingMode' : ''}',
         );
+        _pageCache[key] = result;
+        _pageLoaded[key] = DateTime.now();
         if (mounted && screen == target) setState(() => extra = result);
-      });
-    } else if (api.token != null) {
+      } catch (e) {
+        if (mounted && screen == target) message(e);
+      } finally {
+        if (mounted && screen == target) setState(() => pageLoading = false);
+      }
+    } else if (api.token != null && !api.connected) {
       await run(api.refresh);
     }
   }
@@ -217,6 +237,7 @@ class _AuroraAppState extends State<AuroraApp> {
   Future<void> enterRoom(String path, Map<String, dynamic> body) async {
     await run(() async {
       final result = await api.request('api/rooms/$path', body);
+      api.data['room'] = result;
       if (mounted) {
         setState(() {
           room = result;
@@ -235,8 +256,13 @@ class _AuroraAppState extends State<AuroraApp> {
   }) async {
     await run(() async {
       final response = await api.request('api/$path', body);
+      _pageLoaded.clear();
       if (reload && mounted) setState(() => extra = response);
-      await api.refresh();
+      if (response['profile'] != null && response['chips'] != null) {
+        api.applyState(response);
+      } else {
+        await api.refresh();
+      }
     });
   }
 
@@ -500,7 +526,8 @@ class _AuroraAppState extends State<AuroraApp> {
             body: SafeArea(
               child: Column(
                 children: [
-                  if (busy) const LinearProgressIndicator(minHeight: 2),
+                  if (busy || pageLoading)
+                    const LinearProgressIndicator(minHeight: 2),
                   Expanded(
                     child: LayoutBuilder(
                       builder: (context, constraints) {

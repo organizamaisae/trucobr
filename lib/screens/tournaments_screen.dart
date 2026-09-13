@@ -167,6 +167,7 @@ extension _Tournaments on _AuroraAppState {
         hiddenInvites.add(invite['id']);
         if (accept) {
           room = result;
+          api.data['room'] = result;
           screen = 'lobby';
           orient(false);
         }

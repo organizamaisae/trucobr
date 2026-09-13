@@ -130,3 +130,62 @@ flutter test
 Os testes de lógica usam SQLite isolado e não modificam seu Atlas. Cobrem partidas completas, torneio até a final, ficha/loja, WebSockets, privacidade e autorização exclusiva de criação. As capturas Flutter usam fixtures; não são jogadores inseridos no banco real.
 
 O teste real do Atlas continua bloqueado pela falha de conexão descrita acima. Não houve deploy no Render nem push ao GitHub nesta entrega. Testes de carga, recuperação por e-mail e build iOS continuam fora da validação realizada.
+
+
+## Atualização: desempenho e painel do proprietário
+
+A rota `/admgameconfig` agora tem uma interface web com sessão de uma hora, saída,
+busca de jogadores (25 por página), ajuste de fichas com motivo e histórico,
+criação de itens escolhendo uma arte já existente e inclusão manual de robôs em torneios abertos.
+O login do painel é `gustavoluzmachado@gmail.com`; a senha solicitada é `1234`.
+Pode ser substituída pela variável `ADMIN_PANEL_PASSWORD`, sem mudar a senha da conta do jogo.
+Os robôs aparecem como Robô, usam o mesmo motor de regras e jogam uma ação a cada 2 segundos.
+Eles não conhecem cartas adversárias e não são inseridos automaticamente em salas rápidas.
+
+O painel e o aplicativo usam o mesmo MongoDB. Para atualizar, publique o backend e gere um novo APK.
+Nenhum dado de teste foi inserido no banco de produção.
+
+### O que causava lentidão
+
+- `pong` e estados idênticos do WebSocket reconstruíam toda a interface: agora só mudanças notificam a tela.
+- Navegar buscava `/api/me` mesmo conectado; agora usa estado recebido por WebSocket.
+- Leituras simultâneas iguais compartilham uma requisição HTTP; respostas completas das mutações são reaproveitadas.
+- Dados das abas são reutilizados por até 5 segundos; ações locais invalidam esse prazo.
+- Consultar uma partida como espectador disparava broadcast para todos: removido. O polling de 2 segundos permanece apenas enquanto se assiste, sem sobreposição.
+- MongoDB síncrono e cálculo de estado executavam no event loop: agora usam threads, com escrita serializada pelo mesmo lock autoritativo.
+- Broadcast consultava dados repetidos e esperava cada socket sequencialmente: agora reutiliza leituras em uma mesma unidade e envia em paralelo com timeout de 2 segundos.
+- A busca de salas lia todo o arquivo de partidas: agora filtra status/jogador no banco e usa índice MongoDB.
+- Nomes de todos os usuários eram enviados em cada estado; agora só os participantes dos torneios são incluídos.
+- Logo e avatares eram decodificados na resolução original: agora usam cache na resolução exibida. As artes continuam locais; não há download a cada tela.
+- HTTP já possuía timeout de 60 segundos; foi reduzido para 20 segundos. Reconexão usa espera progressiva até 32 segundos.
+
+A inicialização do MongoDB continua sendo aguardada antes de aceitar partidas: mover a operação para uma thread
+não elimina a latência do Atlas nem permite iniciar sem persistência. O servidor continua exigindo um único worker.
+Ranking ainda retorna até 100 jogadores; histórico e carteira, até 100 registros. O catálogo e os torneios
+permanecem no estado do aplicativo; com bases muito grandes, estes fluxos ainda precisam de paginação adicional.
+Não foi feita medição de FPS ou latência em aparelho físico/servidor de produção, portanto não há promessa de percentual de ganho.
+
+### Validar no Android
+
+No PowerShell, dentro do projeto (a unidade R evita problemas do Flutter com o caminho acentuado):
+
+```powershell
+subst R: "$PWD"
+Set-Location R:\
+flutter pub get
+flutter analyze
+flutter test
+flutter run --release -d ID_DO_CELULAR --dart-define=SERVER_URL=https://trucobr.up.railway.app
+```
+
+Se R já estiver mapeada para este projeto, basta `Set-Location R:\`.
+Use `flutter devices` para obter o ID. Faça cinco aberturas frias e cinco trocas entre Início,
+Perfil, Loja e Torneios, na mesma rede. Para medir frames e reconstruções, use `flutter run --profile`
+e o painel Performance do Flutter DevTools; compare UI/raster e requisições com o mesmo roteiro.
+
+```powershell
+flutter build apk --release --dart-define=SERVER_URL=https://trucobr.up.railway.app
+```
+
+Saída: `build/app/outputs/flutter-apk/app-release.apk`. O novo APK inclui a logo anexada só no login;
+o ícone Android foi preservado. A assinatura segue a configuração Android existente.

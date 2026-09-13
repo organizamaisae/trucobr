@@ -24,6 +24,18 @@ class TrucoService extends ChangeNotifier {
   String? spectatingCode;
   Map<String, dynamic>? spectatedRoom;
   bool _spectatorLoading = false;
+  Future<void>? _refreshing;
+  String _lastState = '';
+  final Map<String, Future<Map<String, dynamic>>> _pendingReads = {};
+  int _retryCount = 0;
+  void applyState(Map<String, dynamic> value) {
+    final signature = jsonEncode(value);
+    if (signature == _lastState || disposed) return;
+    _lastState = signature;
+    data = value;
+    notifyListeners();
+  }
+
   void stopSpectating() {
     _spectatorTimer?.cancel();
     spectatingCode = null;
@@ -42,8 +54,10 @@ class TrucoService extends ChangeNotifier {
       try {
         final result = await request('api/rooms/spectate', {'code': code});
         if (!disposed && spectatingCode == code) {
-          spectatedRoom = result;
-          notifyListeners();
+          if (jsonEncode(spectatedRoom) != jsonEncode(result)) {
+            spectatedRoom = result;
+            notifyListeners();
+          }
         }
       } catch (_) {
         // Keep the last public state and retry on the next tick.
@@ -62,6 +76,20 @@ class TrucoService extends ChangeNotifier {
   Future<Map<String, dynamic>> request(
     String path, [
     Map<String, dynamic>? body,
+  ]) {
+    if (body != null) return _request(path, body);
+    final key = '$url|$token|$path';
+    return _pendingReads.putIfAbsent(
+      key,
+      () => _request(path).whenComplete(() {
+        _pendingReads.remove(key);
+      }),
+    );
+  }
+
+  Future<Map<String, dynamic>> _request(
+    String path, [
+    Map<String, dynamic>? body,
   ]) async {
     final uri = Uri.parse('$url/$path');
     final headers = {
@@ -72,7 +100,7 @@ class TrucoService extends ChangeNotifier {
         await (body == null
                 ? client.get(uri, headers: headers)
                 : client.post(uri, headers: headers, body: jsonEncode(body)))
-            .timeout(const Duration(seconds: 60));
+            .timeout(const Duration(seconds: 20));
     Map<String, dynamic> result;
     try {
       result = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
@@ -111,9 +139,11 @@ class TrucoService extends ChangeNotifier {
     connect();
   }
 
-  Future<void> refresh() async {
-    data = await request('api/me');
-    if (!disposed) notifyListeners();
+  Future<void> refresh() =>
+      _refreshing ??= _refresh().whenComplete(() => _refreshing = null);
+
+  Future<void> _refresh() async {
+    applyState(await request('api/me'));
   }
 
   void connect() {
@@ -133,11 +163,14 @@ class TrucoService extends ChangeNotifier {
     _subscription = _socket!.stream.listen(
       (event) {
         final message = jsonDecode(event as String) as Map;
+        final wasConnected = connected;
         connected = true;
+        _retryCount = 0;
         if (message['type'] == 'state') {
-          data = Map<String, dynamic>.from(message['data'] as Map);
+          applyState(Map<String, dynamic>.from(message['data'] as Map));
+        } else if (!wasConnected && !disposed) {
+          notifyListeners();
         }
-        if (!disposed) notifyListeners();
       },
       onError: (Object _) => reconnect(),
       onDone: reconnect,
@@ -151,10 +184,14 @@ class TrucoService extends ChangeNotifier {
 
   void reconnect() {
     if (disposed || token == null) return;
-    connected = false;
-    notifyListeners();
+    if (connected) {
+      connected = false;
+      notifyListeners();
+    }
+    _ping?.cancel();
     _retry?.cancel();
-    _retry = Timer(const Duration(seconds: 3), connect);
+    _retry = Timer(Duration(seconds: (2 << _retryCount.clamp(0, 4))), connect);
+    _retryCount++;
   }
 
   Future<void> logout() async {
@@ -162,6 +199,7 @@ class TrucoService extends ChangeNotifier {
     await request('api/logout', {});
     token = null;
     data = {};
+    _lastState = '';
     _retry?.cancel();
     _ping?.cancel();
     await _subscription?.cancel();

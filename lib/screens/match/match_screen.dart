@@ -113,8 +113,12 @@ extension _MatchScreen on _AuroraAppState {
                           members[index]['name'],
                           size: avatar,
                           active: !finished && g['turn'] == index,
-                          cosmetic: members[index]['equipped']?['avatar'],
-                          frame: members[index]['equipped']?['frame'],
+                          cosmetic:
+                              (members[index]['visuals'] ??
+                              members[index]['equipped'])?['avatar'],
+                          frame:
+                              (members[index]['visuals'] ??
+                              members[index]['equipped'])?['frame'],
                         ),
                         Container(
                           width: 78,
@@ -256,7 +260,7 @@ extension _MatchScreen on _AuroraAppState {
                                     child: TrucoCard(
                                       g['hand'][i],
                                       width: cw,
-                                      back: equipped['back'],
+                                      back: visuals['back'],
                                       enabled: own && !busy,
                                       onTap: () => playAction('play', card: i),
                                     ),

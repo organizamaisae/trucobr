@@ -10,7 +10,7 @@ import contextlib
 from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, HTMLResponse
-from .database import Session, get, put, all_of, delete, delete_sessions, initialize
+from .database import Session, get, put, all_of, delete, delete_sessions, initialize, rooms_for_user, live_rooms
 from . import engine as truco
 from .security import password_hash, verify, digest, session
 
@@ -18,8 +18,6 @@ lock = asyncio.Lock()
 peers = {}
 rates = {}
 ADMIN_EMAIL='gustavoluzmachado@gmail.com'
-ADMIN_PANEL_PASSWORD = os.getenv('ADMIN_PANEL_PASSWORD', '1234')
-admin_panel_tokens = set()
 
 
 def can_create(u):
@@ -99,6 +97,7 @@ def public(u):
     return {**{k: u[k] for k in ['id', 'name', 'xp', 'wins', 'losses', 'streak', 'best', 'equipped']},
             'level': 1+u['xp']//1000, 'games': wins+losses,
             'win_rate': round(wins*100/max(1, wins+losses)), 'online': u['id'] in peers,
+            'visuals': u.get('visuals', u['equipped']), 'bot': u.get('bot', False),
             'trophies': u.get('trophies', [])}
 
 
@@ -128,7 +127,7 @@ def room_view(db, r, uid):
 
 
 def active_room(db, uid):
-    return next((r for r in all_of(db, 'room') if uid in r['players'] and r['status'] in ['waiting', 'playing']), None)
+    return next(iter(rooms_for_user(db, uid, ['waiting','playing'])), None)
 
 
 def create_room(db, u, data, quick=False, tournament=None):
@@ -147,7 +146,7 @@ def create_room(db, u, data, quick=False, tournament=None):
              capacity=capacity, fee=fee, rule=rule, players=[u['id']], status='waiting', game=None,
              password=password_hash(str(data['password'])) if data.get('password') else None,
              quick=quick, settled=False, tournament=tournament, updated=time.time(),
-             table=u['equipped'].get('table','table-2'), table_text='TRUCO BR')
+             table=u.get('visuals', u['equipped']).get('table','table-2'), table_text='TRUCO BR')
     put(db, 'room:'+code, 'room', r)
     return r
 
@@ -265,7 +264,7 @@ def begin_tournament(db, t):
                 players = players[:-1]
             entrants = [players[i:i+2] for i in range(0,len(players),2)] if team_size == 2 else players
         # End casual rooms atomically before seating their players in the event.
-        for r in all_of(db,'room'):
+        for r in live_rooms(db):
             if not r.get('tournament') and r['status'] in ['waiting','playing'] and set(players).intersection(r['players']):
                 if r['status']=='playing':
                     for p in r['players']:
@@ -310,6 +309,11 @@ def pending_invites(db, uid):
     return result
 
 
+def tournament_names(db, tournaments):
+    ids = {uid for t in tournaments for uid in t['players']}
+    return {uid: account['name'] for uid in ids if (account := get(db, 'user:'+uid))}
+
+
 def dashboard(db, u):
     d = now().date().isoformat()
     week = now().strftime('%G-%V')
@@ -321,29 +325,61 @@ def dashboard(db, u):
         m['claimed'] = m['id'] in u['claims']
     r = active_room(db, u['id'])
     if not r:
-        r = next((x for x in reversed(all_of(db, 'room')) if u['id'] in x['players'] and x['status'] in ['finished','closed']), None)
+        r = next(iter(rooms_for_user(db, u['id'], ['finished','closed'])), None)
+    tournaments = [t for t in all_of(db,'tournament') if t.get('created_by') or t['status']!='waiting' or t['players']]
     return dict(profile=public(u), can_create_tournaments=can_create(u), admin_eligible=(u.get('email') or '').lower()==ADMIN_EMAIL, chips=u['chips'], earned=u['earned'], spent=u['spent'],
                 monthly_pass=monthly_pass(u), ledger=list(reversed(u['ledger'][-100:])), history=list(reversed(u['history'][-100:])),
                 daily_available=u['daily'] != d, inventory=u['inventory'], missions=missions,
                 achievements=[dict(name=n, unlocked=u[k] >= v) for n, k, v in [('Primeira vitória', 'wins', 1), ('Dez vitórias', 'wins', 10), ('Invencível: 5 seguidas', 'best', 5), ('Nível 5', 'xp', 4000)]],
                 invites=pending_invites(db,u['id']),
-                tournaments=[tournament_view(t,u['id']) for t in all_of(db,'tournament') if t.get('created_by') or t['status']!='waiting' or t['players']],
-                tournament_names={p['id']:p['name'] for p in all_of(db,'user')},
+                tournaments=[tournament_view(t,u['id']) for t in tournaments],
+                tournament_names=tournament_names(db,tournaments),
                 room=room_view(db, r, u['id']) if r else None)
+
+
+def step_bots(db):
+    changed = False
+    for r in live_rooms(db):
+        if not r.get('tournament') or r['status'] != 'playing':
+            continue
+        g = r['game']
+        bot_seats = [i for i, uid in enumerate(r['players']) if uid.startswith('bot-') and get(db, 'user:'+uid).get('bot')]
+        if not bot_seats:
+            continue
+        if g['hand_done']:
+            seat, action = bot_seats[0], 'next'
+        elif g['pending']:
+            responders = [i for i in bot_seats if i % 2 == g['pending']['team']]
+            if not responders:
+                continue
+            seat, action = responders[0], 'accept'
+        elif g['turn'] in bot_seats:
+            seat, action = g['turn'], 'play'
+        else:
+            continue
+        # No opponent cards inspected: choose a random legal card from own hand.
+        card = secrets.randbelow(len(g['hands'][seat])) if action == 'play' else None
+        truco.act(g, r['players'][seat], action, card)
+        settle(db, r)
+        r['updated'] = time.time()
+        put(db, 'room:'+r['code'], 'room', r)
+        changed = True
+    return changed
 
 
 async def maintenance():
     while True:
-        await asyncio.sleep(10)
+        await asyncio.sleep(2)
         changed = False
-        async with lock:
+        def maintain():
             with Session.begin() as db:
                 changed = start_due_tournaments(db)
+                changed = step_bots(db) or changed
                 for invitation in all_of(db,'invite'):
                     if invitation['expires']<=time.time():
                         delete(db,'invite:'+invitation['id'])
                         changed=True
-                for r in all_of(db,'room'):
+                for r in live_rooms(db):
                     if r['status']=='playing' and time.time()-r['updated']>180:
                         g=r['game']
                         if g['hand_done']:
@@ -361,13 +397,19 @@ async def maintenance():
                         r['status']='closed'
                         put(db,'room:'+r['code'],'room',r)
                         changed=True
+            return changed
+        async with lock:
+            changed = await asyncio.to_thread(maintain)
         if changed:
             await broadcast()
 
 
 @asynccontextmanager
 async def lifespan(app):
-    initialize()
+    global lock, broadcast_lock
+    lock = asyncio.Lock()
+    broadcast_lock = asyncio.Lock()
+    await asyncio.to_thread(initialize)
     task=asyncio.create_task(maintenance())
     try:
         yield
@@ -410,58 +452,8 @@ def health():
     return dict(status='ok', app='Truco BR', version=3)
 
 
-@app.api_route('/admgameconfig', methods=['GET', 'POST'])
-async def admin_game_config(request: Request):
-    """Small admin panel API; the Flutter client or a browser can use this route."""
-    if request.method == 'GET':
-        return HTMLResponse('''<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width"><title>Truco BR • Administração</title>
-<style>body{font:16px system-ui;background:#06251b;color:#fff;max-width:620px;margin:30px auto;padding:20px}input,select,button{padding:12px;margin:5px;border-radius:8px;border:1px solid #c9a227}button{background:#0a9f62;color:#fff;font-weight:bold}section{background:#0d3a2a;padding:16px;border-radius:12px;margin:15px 0}</style>
-<h1>Truco BR — Administração</h1><section><h2>Login</h2><input id="email" placeholder="E-mail"><input id="password" type="password" placeholder="Senha"><button onclick="login()">Entrar</button></section>
-<section><h2>Novo item da loja</h2><input id="name" placeholder="Nome"><select id="kind"><option>avatar</option><option>frame</option><option>back</option><option>table</option><option>emote</option><option>effect</option></select><input id="price" type="number" placeholder="Preço em fichas"><button onclick="addItem()">Criar item</button></section>
-<section><h2>Dar fichas</h2><input id="user" placeholder="ID ou e-mail"><input id="amount" type="number" placeholder="Quantidade (pode ser negativa)"><button onclick="grant()">Aplicar</button></section><p id="msg"></p>
-<script>let token='';const msg=x=>document.getElementById('msg').textContent=x;async function post(u,b){let r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});let j=await r.json();if(!r.ok)throw Error(j.detail||'Erro');return j}async function login(){try{token=(await post('/admgameconfig',{email:email.value,password:password.value})).token;msg('Login autorizado.')}catch(e){msg(e.message)}}async function addItem(){try{await post('/admgameconfig/action',{admin_token:token,action:'add_item',name:name.value,kind:kind.value,price:Number(price.value)});msg('Item criado.')}catch(e){msg(e.message)}}async function grant(){try{await post('/admgameconfig/action',{admin_token:token,action:'grant_chips',user_id:user.value,amount:Number(amount.value)});msg('Saldo atualizado.')}catch(e){msg(e.message)}}</script></html>''')
-    body = await request.json()
-    if body.get('email', '').strip().lower() == ADMIN_EMAIL and str(body.get('password', '')) == ADMIN_PANEL_PASSWORD:
-        token = secrets.token_urlsafe(32)
-        admin_panel_tokens.add(token)
-        return dict(ok=True, token=token, message='Acesso administrativo autorizado.')
-    fail('E-mail ou senha de administrador incorretos.', 401)
-
-
-@app.post('/admgameconfig/action')
-async def admin_game_config_action(request: Request):
-    body = await request.json()
-    if body.get('admin_token') not in admin_panel_tokens:
-        fail('Faça login na área administrativa.', 401)
-    action = body.get('action')
-    async with lock:
-        with Session.begin() as db:
-            if action == 'add_item':
-                kind = str(body.get('kind', '')).strip().lower()
-                name = str(body.get('name', '')).strip()[:60]
-                price = int(body.get('price', 0))
-                if kind not in {'avatar', 'frame', 'back', 'table', 'emote', 'effect'} or not name or price < 0:
-                    fail('Item inválido. Use tipo, nome e preço válidos.')
-                item = dict(id='custom-'+secrets.token_hex(6), kind=kind, name=name, price=price, icon=kind)
-                put(db, 'shop_item:'+item['id'], 'shop_item', item)
-                return dict(ok=True, item=item, items=catalog(db))
-            if action == 'grant_chips':
-                target = str(body.get('user_id') or body.get('email') or '').strip().lower()
-                amount = int(body.get('amount', 0))
-                users = all_of(db, 'user')
-                target_user = next((x for x in users if x['id'] == target or (x.get('email') or '').lower() == target), None)
-                if not target_user or amount == 0:
-                    fail('Jogador ou quantidade inválida.')
-                ledger(target_user, amount, str(body.get('reason') or 'Ajuste administrativo'))
-                save_user(db, target_user)
-                return dict(ok=True, user=public(target_user), chips=target_user['chips'])
-            if action == 'announce':
-                text = str(body.get('text', '')).strip()[:240]
-                if not text:
-                    fail('Informe um aviso.')
-                put(db, 'config:announcement', 'config', dict(text=text, date=now().isoformat()))
-                return dict(ok=True, announcement=text)
-            fail('Ação administrativa desconhecida.', 400)
+from .admin_panel import install_admin
+install_admin(app)
 
 
 @app.post('/auth/{action}')
@@ -474,7 +466,7 @@ async def auth(action: str, request: Request):
     rates[ip] = (stamp, count+1)
     if count >= 20:
         fail('Muitas tentativas. Aguarde um minuto.', 429)
-    async with lock:
+    def authenticate():
         with Session.begin() as db:
             email = str(data.get('email', '')).strip().lower()
             password = str(data.get('password', ''))
@@ -512,6 +504,9 @@ async def auth(action: str, request: Request):
             put(db, 'session:'+digest(token), 'session', s)
             return dict(token=token, **dashboard(db, u))
 
+    async with lock:
+        return await asyncio.to_thread(authenticate)
+
 
 @app.api_route('/api/{path:path}', methods=['GET', 'POST'])
 async def api(path: str, request: Request):
@@ -521,14 +516,16 @@ async def api(path: str, request: Request):
         fail('Envie um objeto JSON.')
     if request.method != 'POST' and path not in ['me','profile','shop','ranking','friends','tournaments']:
         fail('Esta operação exige POST.',405)
-    async with lock:
+    def execute():
         with Session.begin() as db:
             u = user(db, token)
-            result = dispatch(db, u, path, body, request.method)
+            return u, dispatch(db, u, path, body, request.method)
+    async with lock:
+        u, result = await asyncio.to_thread(execute)
     if path=='logout':
         for ws in peers.pop(u['id'],set()):
             await ws.close(code=1000)
-    if request.method=='POST':
+    if request.method=='POST' and path not in ['rooms/spectate','rooms/state']:
         await broadcast()
     return result
 
@@ -601,6 +598,7 @@ def dispatch(db, u, path, b, method):
                 if item['id'] not in u['inventory']:
                     fail('Adquira este item primeiro.')
                 u['equipped'][item['kind']] = item['id']
+                u.setdefault('visuals', dict(u['equipped']))[item['kind']] = item.get('visual_id', item['id'])
             elif item['id'] not in u['inventory']:
                 ledger(u, -item['price'], 'Loja: '+item['name'])
                 u['inventory'].append(item['id'])
@@ -794,7 +792,7 @@ def dispatch(db, u, path, b, method):
                         save_user(db,account)
                 delete(db, 'tournament:'+tid)
                 ts = [x for x in all_of(db,'tournament') if x.get('created_by') or x['status']!='waiting' or x['players']]
-                return dict(tournaments=[tournament_view(x,uid) for x in ts[-30:]], names={p['id']:p['name'] for p in all_of(db,'user')})
+                return dict(tournaments=[tournament_view(x,uid) for x in ts[-30:]], names=tournament_names(db,ts[-30:]))
 
             if t['status'] != 'waiting':
                 fail('Inscrições encerradas.')
@@ -833,7 +831,7 @@ def dispatch(db, u, path, b, method):
                 begin_tournament(db,t)
             put(db, 'tournament:'+tid,'tournament',t)
         ts = [t for t in all_of(db,'tournament') if t.get('created_by') or t['status']!='waiting' or t['players']]
-        return dict(tournaments=[tournament_view(t,uid) for t in ts[-30:]], names={p['id']:p['name'] for p in all_of(db,'user')})
+        return dict(tournaments=[tournament_view(t,uid) for t in ts[-30:]], names=tournament_names(db,ts[-30:]))
     fail('Rota não encontrada.',404)
 
 
@@ -841,18 +839,26 @@ def friend_ids(db, uid):
     return [e['b'] if e['a']==uid else e['a'] for e in all_of(db,'friend') if uid in [e['a'],e['b']] and e['status']=='accepted']
 
 
+broadcast_lock = asyncio.Lock()
+
 async def broadcast():
-    for uid, sockets in list(peers.items()):
-        with Session() as db:
-            u = get(db,'user:'+uid)
-            data = dashboard(db,u)
-        for ws in list(sockets):
+    # One database snapshot per broadcast, with reads reused across recipients.
+    async with broadcast_lock:
+        targets = [(uid, list(sockets)) for uid, sockets in list(peers.items())]
+        if not targets:
+            return
+        def snapshot():
+            with Session() as db:
+                db.cache_reads = True
+                return {uid: dashboard(db, get(db, 'user:'+uid)) for uid, _ in targets}
+        async with lock:
+            states = await asyncio.to_thread(snapshot)
+        async def send(uid, ws):
             try:
-                await asyncio.wait_for(ws.send_json(dict(type='state',data=data)), timeout=2)
+                await asyncio.wait_for(ws.send_json(dict(type='state', data=states[uid])), 2)
             except Exception:
-                sockets.discard(ws)
-        if not sockets:
-            peers.pop(uid,None)
+                peers.get(uid, set()).discard(ws)
+        await asyncio.gather(*(send(uid, ws) for uid, sockets in targets for ws in sockets))
 
 
 @app.websocket('/ws')
@@ -861,16 +867,16 @@ async def websocket(ws: WebSocket):
     uid = None
     try:
         first = await asyncio.wait_for(ws.receive_json(), timeout=10)
-        with Session() as db:
-            u = user(db,str(first.get('token','')))
-            uid = u['id']
+        def identify():
+            with Session() as db:
+                return user(db,str(first.get('token','')))['id']
+        uid = await asyncio.to_thread(identify)
         peers.setdefault(uid,set()).add(ws)
         await broadcast()
         while True:
             await ws.receive_text()
             # Keepalives also renew the authenticated session check.
-            with Session() as db:
-                user(db,str(first.get('token','')))
+            await asyncio.to_thread(identify)
             await ws.send_json(dict(type='pong'))
     except (WebSocketDisconnect, asyncio.TimeoutError, HTTPException, ValueError):
         pass

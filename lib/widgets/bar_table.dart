@@ -58,6 +58,10 @@ class CharacterPortrait extends StatelessWidget {
                 offset: Offset(-(index % 3) * size, -(index ~/ 3) * size),
                 child: Image.asset(
                   'assets/images/truco-br-characters.png',
+                  cacheWidth:
+                      (size * 3 * MediaQuery.devicePixelRatioOf(context))
+                          .round()
+                          .clamp(1, 1536),
                   width: size * 3,
                   height: size * 2,
                   fit: BoxFit.fill,

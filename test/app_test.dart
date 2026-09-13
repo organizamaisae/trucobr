@@ -138,6 +138,18 @@ class FixtureService extends TrucoService {
   }
 }
 
+Future<void> settleImages(WidgetTester tester) async {
+  final context = tester.element(find.byType(MaterialApp));
+  final providers = tester
+      .widgetList<Image>(find.byType(Image))
+      .map((image) => image.image)
+      .toSet();
+  await tester.runAsync(
+    () => Future.wait(providers.map((image) => precacheImage(image, context))),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUpAll(() async {
     for (final font in [
@@ -147,6 +159,49 @@ void main() {
     ]) {
       await (FontLoader(font.$1)..addFont(rootBundle.load(font.$2))).load();
     }
+  });
+  test(
+    'Concurrent reads share HTTP and identical states do not rebuild',
+    () async {
+      var calls = 0;
+      final service = TrucoService(
+        client: MockClient((request) async {
+          calls++;
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          return http.Response('{"chips":100}', 200);
+        }),
+      );
+      var changes = 0;
+      service.addListener(() => changes++);
+      await Future.wait([service.refresh(), service.refresh()]);
+      expect(calls, 1);
+      expect(changes, 1);
+      await service.refresh();
+      expect(changes, 1);
+      service.dispose();
+    },
+  );
+  testWidgets('Finished tournament never offers return to room', (
+    tester,
+  ) async {
+    final service = FixtureService();
+    service.data['room'] = {
+      'code': 'FINAL',
+      'status': 'finished',
+      'tournament': 't1',
+    };
+    await tester.pumpWidget(AuroraApp(service: service));
+    service.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(find.text('VOLTAR À SALA'), findsNothing);
+    service.data['room'] = {
+      'code': 'OPEN',
+      'status': 'waiting',
+      'tournament': null,
+    };
+    service.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(find.text('VOLTAR À SALA'), findsOneWidget);
   });
   test('API surfaces route errors and sends bearer token', () async {
     final service = TrucoService(
@@ -190,6 +245,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await settleImages(tester);
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/truco_br_login.png'),
@@ -239,6 +295,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: label);
         if (size.width == 390) {
+          await settleImages(tester);
           await expectLater(
             find.byType(MaterialApp),
             matchesGoldenFile(
@@ -328,6 +385,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await settleImages(tester);
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/tournaments_live.png'),
@@ -337,6 +395,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Gustavo + Lia'), findsOneWidget);
     expect(find.text('Rafa + Ana'), findsOneWidget);
+    await settleImages(tester);
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/bracket.png'),
@@ -392,6 +451,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('600 XP neste mês • 10 conquistas'), findsOneWidget);
     expect(find.text('Resgatado'), findsOneWidget);
+    await settleImages(tester);
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/monthly_pass.png'),
@@ -440,6 +500,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('SEMIFINAL'), findsOneWidget);
     expect(find.text('ASSISTIR AO VIVO'), findsNWidgets(4));
+    await settleImages(tester);
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/bracket_eight.png'),
@@ -483,6 +544,7 @@ void main() {
     expect(find.text('CORRER'), findsNothing);
     expect(find.text('Agora é Você'), findsNothing);
     expect(find.byType(TrucoCard), findsOneWidget);
+    await settleImages(tester);
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/spectator_praia.png'),
@@ -580,6 +642,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await settleImages(tester);
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/truco_match.png'),
@@ -603,6 +666,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(AuroraApp(service: FixtureService()));
     await tester.pumpAndSettle();
+    await settleImages(tester);
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/truco_home.png'),
