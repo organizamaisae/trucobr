@@ -9,7 +9,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 class TrucoService extends ChangeNotifier {
   static const defaultUrl = String.fromEnvironment(
     'SERVER_URL',
-    defaultValue: 'https://aurora-z5xt.onrender.com',
+    defaultValue: 'https://trucobr.up.railway.app',
   );
   final http.Client client;
   final FlutterSecureStorage storage;

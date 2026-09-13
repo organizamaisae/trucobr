@@ -1,6 +1,6 @@
 # Truco BR — versão 3.1
 
-Mesmo aplicativo Flutter e mesmo backend Python/multiplayer, agora com o visual brasileiro da referência e MongoDB. O endereço do servidor continua `https://aurora-z5xt.onrender.com`. Login por e-mail/senha ou convidado, sem Google. Não há bots nem operações com dinheiro real.
+Mesmo aplicativo Flutter e mesmo backend Python/multiplayer, agora com o visual brasileiro da referência e MongoDB. O endereço do servidor é `https://trucobr.up.railway.app`. Login por e-mail/senha ou convidado, sem Google. Não há bots nem operações com dinheiro real.
 
 ## O que mudou
 
@@ -73,7 +73,7 @@ Com Docker, configure `.env` e execute `docker compose up --build`. O container 
 
 O Render define sua própria variável `PORT`; mantenha `$PORT` no comando. Não altere a URL do aplicativo, não crie outro serviço e não coloque a URI do banco no APK.
 
-Resposta esperada em `https://aurora-z5xt.onrender.com/health`:
+Resposta esperada em `https://trucobr.up.railway.app/health`:
 
 ```json
 {"status":"ok","app":"Truco BR","version":3}
@@ -102,7 +102,7 @@ Set-Location R:\
 flutter pub get
 flutter analyze
 flutter test
-flutter build apk --debug --dart-define=SERVER_URL=https://aurora-z5xt.onrender.com
+flutter build apk --debug --dart-define=SERVER_URL=https://trucobr.up.railway.app
 ```
 
 Saída: `build/app/outputs/flutter-apk/app-debug.apk`. O APK distribuído é para testes, assinado com chave de desenvolvimento. Para publicação nas lojas, configure suas chaves de assinatura. iOS está incluído, mas exige macOS/Xcode e assinatura Apple; não foi compilado no Windows.
